@@ -2,6 +2,8 @@
 
 A library with optional TMDB titles, episode names, and movie/series posters: all magnets in your account, videos in nested folders, search, a ready-only filter, file sizes, and playback in a new IINA window.
 
+![AllDebrid library in IINA](.github/alldebrid-library.png)
+
 ## Installation
 
 Requires IINA 1.4.0 or later on macOS with plugins enabled.
