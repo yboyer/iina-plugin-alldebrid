@@ -6,12 +6,14 @@ A library without posters: all magnets in your account, videos in nested folders
 
 Requires IINA 1.4.0 or later on macOS with plugins enabled.
 
-1. Run `python3 scripts/pack.py` to generate `dist/alldebrid.iinaplgz` (requires Python 3). Open the package with IINA and grant network access to `api.alldebrid.com` and `*.debrid.it` (video streaming servers).
+1. Run `/Applications/IINA.app/Contents/MacOS/iina-plugin link .` from the repository directory.
 2. Open **Plugins → AllDebrid → AllDebrid Library…**.
 3. Click **Sign in to AllDebrid**, then open the displayed link and confirm the PIN in your browser.
 4. The library loads automatically. Expand a magnet and click **Play**.
 
 **Refresh** checks all magnet statuses and reuses cached files for unchanged, ready magnets. Missing or expired files are loaded in batches of 100. File listings are cached for 24 hours, including between IINA launches; failed listings are retried on the next refresh. Magnets that are not ready remain visible but cannot be played. Search matches magnet names and video paths. Videos are identified by their file extensions; archives and ISO images are not scanned. The plugin does not add, delete, or restart magnets.
+
+**Clear cache** clears the in-memory and saved file-listing cache without signing out. The displayed library remains usable; the next **Refresh** reloads file listings. The button is also available before sign-in and is disabled while an operation is running.
 
 Your account must allow access to magnets and link unlocking. A direct link is generated for each playback request; delayed links are polled for up to ten minutes. Playback depends on file availability and the formats supported by IINA.
 
