@@ -87,3 +87,19 @@ test('search ignores accents and combines words across magnet names and file met
   assert.equal(details.children[1].children[0].textContent, 'Amélie');
   assert.equal(details.children[1].children[0].children[0].textContent, '2001 · 1080P');
 });
+
+test('TMDB settings clear submitted key and posters load lazily with failure fallback', () => {
+  const h = harness();
+  h.nodes.set('tmdb-key', { value: 'key' });
+  h.nodes.get('tmdb-save').listeners.click();
+  assert.deepEqual(h.messages.at(-1), ['tmdb-key', 'key']);
+  assert.equal(h.nodes.get('tmdb-key').value, '');
+  h.receive({ ...library, tmdbConfigured: true, magnets: [{ ...library.magnets[0], files: [{ ...library.magnets[0].files[0], poster: 'https://image.tmdb.org/t/p/w185/poster.jpg' }] }] });
+  const details = h.nodes.get('magnets').children[0];
+  details.toggle(true);
+  const poster = details.children[1].children[2];
+  assert.equal(poster.tag, 'img');
+  assert.equal(poster.loading, 'lazy');
+  poster.listeners.error();
+  assert.equal(poster.hidden, true);
+});

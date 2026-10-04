@@ -14,7 +14,7 @@ async function harness(key = 'secret', initialResponse = () => ({ magnets: [] })
   const request = async (url, options) => {
     calls.push({ url, options });
     const body = await response(url, options);
-    return { text: JSON.stringify({ status: 'success', data: body }), statusCode: 200 };
+    return { text: JSON.stringify(url.startsWith('https://api.themoviedb.org/') ? body : { status: 'success', data: body }), statusCode: 200 };
   };
   const context = {
     require: name => require('../' + name),
@@ -337,4 +337,65 @@ test('cache follows file changes, readiness, deletion and full snapshots', async
   await refresh(1);
   h.handlers.disconnect();
   assert.equal(h.state().magnets.length, 0);
+});
+
+const tmdbLibrary = url => url.endsWith('magnet/status')
+  ? { magnets: [{ id: 1, filename: 'Movies', statusCode: 4 }] }
+  : { magnets: [{ id: 1, files: [
+    { n: 'Amélie.2001.mkv', l: 'a' },
+    { n: 'Amélie.2001.1080p.mkv', l: 'b' },
+    { n: 'Show.S01E01.mkv', l: 'c' }
+  ] }] };
+test('TMDB stores key, searches title/year, caches duplicates, and excludes episodes', async () => {
+  const storage = {};
+  const h = await harness('secret', tmdbLibrary, storage);
+  h.respond(url => url.startsWith('https://api.themoviedb.org/') ? { results: [{ poster_path: '/poster.jpg' }] } : tmdbLibrary(url));
+  h.handlers['tmdb-key'](' tmdb-secret '); await tick();
+  assert.equal(storage['tmdb-api-key'], 'tmdb-secret');
+  assert.equal(h.state().tmdbConfigured, true);
+  const calls = h.calls.filter(call => call.url.includes('/search/movie'));
+  assert.equal(calls.length, 1);
+  assert.match(calls[0].url, /query=Am%C3%A9lie/);
+  assert.match(calls[0].url, /primary_release_year=2001/);
+  assert.equal(calls[0].options.headers, undefined);
+  assert.equal(h.state().magnets[0].files[0].poster, 'https://image.tmdb.org/t/p/w185/poster.jpg');
+  assert.equal(h.state().magnets[0].files[1].poster, h.state().magnets[0].files[0].poster);
+  assert.equal(h.state().magnets[0].files[2].poster, null);
+  assert.equal(JSON.stringify(h.state()).includes('tmdb-secret'), false);
+  h.handlers.refresh(); await tick();
+  assert.equal(h.calls.filter(call => call.url.includes('/search/movie')).length, 1);
+  h.handlers['tmdb-key'](''); await tick();
+  assert.equal(h.state().tmdbConfigured, false);
+  assert.equal(h.state().magnets[0].files[0].poster, null);
+});
+test('TMDB failures retry on refresh, missing posters are cached, and playback remains available', async () => {
+  const h = await harness('secret', tmdbLibrary);
+  h.respond(url => {
+    if (url.includes('/search/movie')) throw new Error('Offline');
+    return url.endsWith('link/unlock') ? { link: 'https://cdn.example/movie.mkv' } : tmdbLibrary(url);
+  });
+  h.handlers['tmdb-key']('key'); await tick();
+  assert.match(h.state().tmdbMessage, /Unable to load TMDB/);
+  h.handlers.play('1:0'); await tick();
+  assert.equal(h.opened.length, 1);
+  h.respond(url => url.includes('/search/movie') ? { results: [] } : tmdbLibrary(url));
+  h.handlers.refresh(); await tick();
+  assert.equal(h.state().tmdbMessage, '');
+  assert.equal(h.state().magnets[0].files[0].poster, null);
+  const count = h.calls.length;
+  h.handlers.refresh(); await tick();
+  assert.equal(h.calls.slice(count).filter(call => call.url.includes('/search/movie')).length, 0);
+});
+test('pending TMDB responses are ignored after sign-out and key replacement', async () => {
+  for (const action of ['disconnect', 'replace']) {
+    const h = await harness('secret', tmdbLibrary);
+    let resolve;
+    h.respond(() => new Promise(done => { resolve = done; }));
+    h.handlers['tmdb-key']('old-key'); await tick();
+    if (action === 'disconnect') h.handlers.disconnect();
+    else h.handlers['tmdb-key']('');
+    resolve({ results: [{ poster_path: '/stale.jpg' }] }); await tick();
+    assert.equal(JSON.stringify(h.state()).includes('stale.jpg'), false);
+    if (action === 'disconnect') assert.deepEqual(h.state().magnets, []);
+  }
 });

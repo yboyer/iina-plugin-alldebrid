@@ -28,6 +28,7 @@ function render() {
   el('refresh').disabled = state.busy || !state.connected;
   el('connect').disabled = state.busy || !!state.pin;
   el('message').textContent = state.message || '';
+  el('tmdb-status').textContent = state.tmdbMessage || (state.tmdbConfigured ? 'TMDB enabled. Save an empty key to disable.' : 'Add your TMDB API key to enable movie posters.');
   el('pin').hidden = !state.pin;
   if (state.pin) { el('code').textContent = state.pin.code; el('pin-link').href = state.pin.url; }
   for (const button of playButtons) button.disabled = state.busy;
@@ -74,7 +75,16 @@ function render() {
         const button = text('button', 'Play'); button.disabled = state.busy;
         playButtons.push(button);
         button.addEventListener('click', () => iina.postMessage('play', file.id));
-        row.append(info, button); details.append(row);
+        row.append(info, button);
+        if (/^https:\/\/image\.tmdb\.org\/t\/p\/w185\/[a-zA-Z0-9_-]+\.(jpg|png)$/.test(file.poster || '')) {
+          const poster = document.createElement('img');
+          poster.className = 'poster'; poster.src = file.poster;
+          poster.alt = 'Poster: ' + (meta.title || file.name);
+          poster.loading = 'lazy'; poster.referrerPolicy = 'no-referrer';
+          poster.addEventListener('error', () => { poster.hidden = true; });
+          row.append(poster);
+        }
+        details.append(row);
       }
     }
     details.addEventListener('toggle', () => {
@@ -101,5 +111,9 @@ el('theme').addEventListener('change', () => {
 });
 el('search').addEventListener('input', render);
 el('ready-only').addEventListener('change', render);
+el('tmdb-save').addEventListener('click', () => {
+  iina.postMessage('tmdb-key', el('tmdb-key').value);
+  el('tmdb-key').value = '';
+});
 iina.onMessage('state', value => { state = value; render(); });
 iina.postMessage('ready', null);

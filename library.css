@@ -20,3 +20,10 @@ summary { cursor: pointer; overflow-wrap: anywhere; } .status { color: var(--mut
 :root[data-theme="dark"] { --background: #17191e; --foreground: #e7eaf0; --surface: #23262e; --border: #444b59; --panel-border: #444b59; --divider: #444b59; --muted: #aeb7c7; --link: #86b9ff; color-scheme: dark; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]):not([data-theme="dark"]) { --background: #17191e; --foreground: #e7eaf0; --surface: #23262e; --border: #444b59; --panel-border: #444b59; --divider: #444b59; --muted: #aeb7c7; --link: #86b9ff; color-scheme: dark; } }
 @media (max-width: 560px) { header, #tools { align-items: stretch; flex-direction: column; } body { padding: 16px; } }
+
+.tmdb-settings { margin-top: 16px; }
+.tmdb-settings input { background: var(--surface); color: var(--foreground); border: 1px solid var(--border); border-radius: 7px; padding: 8px; font: inherit; }
+.tmdb-settings small, footer { color: var(--muted); }
+.file > div { flex: 1; }
+.poster { width: 64px; height: 96px; object-fit: cover; border-radius: 5px; order: -1; flex-shrink: 0; }
+footer { margin-top: 24px; font-size: 11px; }
