@@ -6,7 +6,7 @@ A library with optional TMDB movie posters: all magnets in your account, videos 
 
 Requires IINA 1.4.0 or later on macOS with plugins enabled.
 
-1. Run `/Applications/IINA.app/Contents/MacOS/iina-plugin link .` from the repository directory.
+1. Run `npm ci` then `npm run pack` from the repository directory (Node.js 24+ and Python 3 required). Open `dist/alldebrid.iinaplgz` to install it, or link `dist/plugin` with the IINA CLI below.
 2. Open **Plugins → AllDebrid → AllDebrid Library…**.
 3. Click **Sign in to AllDebrid**, then open the displayed link and confirm the PIN in your browser.
 4. The library loads automatically. Videos are displayed directly; click **Play**.
@@ -31,20 +31,25 @@ No telemetry. When enabled, TMDB receives movie titles and years, and poster ima
 
 ## Development
 
-No npm dependencies or bundler required.
+Sources live in `src/` and use TypeScript. Vite builds CommonJS entries for IINA and a standalone browser script for the library window, targeting Safari 14. HTML and CSS are copied into `dist/plugin`. TypeScript and Biome extend [@yboyer/config](https://github.com/yboyer/config), with module and DOM settings adapted to this plugin.
+
+Filename parsing uses the npm dependency `parse-torrent-title` 3.0.1 (MIT). Vite bundles it into the plugin; no npm installation is needed by the end user. Its license is included in the archive. Local handlers also recognize VFQ, VFF, VF, VO, and AV1.
 
 ```sh
-node --test tests/*.test.js
-python3 scripts/pack.py
+npm ci
+npm run lint       # Biome checks and formatting
+npm run typecheck  # TypeScript validation for sources and tests
+npm test           # Build and run source and plugin regression tests
+npm run pack       # Build dist/plugin and create dist/alldebrid.iinaplgz
 ```
 
-On macOS, you can also use the official CLI:
+On macOS, link the generated plugin directory for development. Rebuild after source changes:
 
 ```sh
-/Applications/IINA.app/Contents/MacOS/iina-plugin link .
-/Applications/IINA.app/Contents/MacOS/iina-plugin pack .
+/Applications/IINA.app/Contents/MacOS/iina-plugin link dist/plugin
+/Applications/IINA.app/Contents/MacOS/iina-plugin pack dist/plugin
 ```
 
 API documentation: https://docs.iina.io/ and https://docs.alldebrid.com/.
 
-Tests use a simulated IINA environment. Actual authentication and playback must be validated on macOS with an AllDebrid account; they cannot run in this Linux environment.
+Unit tests in `tests/*.test.mts` run directly with Node.js 24 against the TypeScript sources. Regression tests in `tests/*.test.cjs` exercise the compiled plugin and browser script with simulated IINA APIs and DOM. `npm test` builds the plugin before running both suites. Actual authentication and playback must be validated on macOS with an AllDebrid account; they cannot run in this Linux environment.

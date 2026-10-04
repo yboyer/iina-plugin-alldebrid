@@ -1,0 +1,19 @@
+{
+  "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
+  "extends": ["@yboyer/config/biome.json"],
+  "javascript": {
+    "globals": ["iina"]
+  },
+  "overrides": [
+    {
+      "includes": ["src/library.css"],
+      "linter": {
+        "rules": {
+          "complexity": {
+            "noImportantStyles": "off"
+          }
+        }
+      }
+    }
+  ]
+}
