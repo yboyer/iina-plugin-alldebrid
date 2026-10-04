@@ -232,6 +232,14 @@ view.setFrame(900, 650);
 view.loadFile('library.html');
 view.onMessage('ready', () => { send(); if (state.connected && !state.magnets.length) task(refresh); });
 view.onMessage('refresh', () => task(refresh));
+view.onMessage('clear-cache', () => {
+  if (busy) return;
+  cacheWarning = '';
+  cache = { version: 1, account, entries: {} };
+  persistCache();
+  state.message = cacheWarning ? 'Unable to clear the library cache.' : 'Cache cleared. Refresh to reload files.';
+  send();
+});
 view.onMessage('connect', () => { if (busy) return; cancel(); task(connect); });
 view.onMessage('play', id => task(token => play(id, token)));
 view.onMessage('open-pin', () => { if (state.pin) utils.open(state.pin.url); });

@@ -290,3 +290,38 @@ test('PIN polling stops on definitive errors, expiry and sign-out', async () => 
     assert.equal(h.state().connected, false);
   }
 });
+
+test('clear cache preserves sign-in and playback but reloads files on the next refresh', async () => {
+  const storage = {};
+  const h = await harness('secret', storage);
+  h.respond(libraryResponse([{ id: 1, statusCode: 4 }]));
+  h.handlers.refresh(); await tick();
+  h.calls.length = 0;
+  h.handlers['clear-cache']();
+  assert.deepEqual(JSON.parse(storage['library-cache-v1']).entries, {});
+  assert.equal(h.state().connected, true);
+  assert.equal(h.state().magnets[0].files.length, 1);
+  assert.equal(h.calls.length, 0);
+  h.handlers.play('1:0'); await tick();
+  assert.equal(h.opened.length, 1);
+  h.calls.length = 0;
+  h.handlers.refresh(); await tick();
+  assert.equal(h.calls.filter(call => call.url.endsWith('magnet/files')).length, 1);
+});
+
+test('clear cache works before sign-in and ignores requests while busy', async () => {
+  const storage = { 'library-cache-v1': JSON.stringify({ version: 1, account: 'old', entries: { private: {} } }) };
+  const h = await harness('', storage);
+  h.handlers['clear-cache']();
+  assert.deepEqual(JSON.parse(storage['library-cache-v1']).entries, {});
+  assert.equal(h.state().connected, false);
+  const connected = await harness('secret', storage);
+  let finish;
+  connected.respond(() => new Promise(resolve => { finish = resolve; }));
+  connected.handlers.refresh();
+  const before = storage['library-cache-v1'];
+  connected.handlers['clear-cache']();
+  assert.equal(storage['library-cache-v1'], before);
+  assert.equal(connected.state().busy, true);
+  finish({ magnets: [] }); await tick();
+});
