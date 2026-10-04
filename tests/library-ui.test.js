@@ -6,7 +6,9 @@ const vm = require('node:vm');
 function harness() {
   class Node {
     constructor(tag) { this.tag = tag; this.children = []; this.listeners = {}; this.value = ''; this.checked = false; }
-    append(...nodes) { this.children.push(...nodes); }
+    append(...nodes) { for (const node of nodes) { node.parent = this; this.children.push(node); } }
+    remove() { if (this.parent) { this.parent.children = this.parent.children.filter(node => node !== this); this.parent = null; } }
+    insertBefore(node, reference) { node.remove(); const index = reference ? this.children.indexOf(reference) : this.children.length; this.children.splice(index, 0, node); node.parent = this; }
     replaceChildren(...nodes) { this.children = nodes; }
     addEventListener(name, callback) { this.listeners[name] = callback; }
     contains(node) { return this === node || this.children.some(child => child.contains(node)); }
@@ -125,4 +127,31 @@ test('delete targets the individual video and follows busy state', () => {
   assert.equal(button.disabled, true);
   h.receive(library);
   assert.equal(button.disabled, false);
+});
+
+test('pending deletion leaves other magnets usable and removal preserves their rows and posters', () => {
+  const h = harness();
+  const first = library.magnets[0];
+  const second = { id: '2', name: 'Movie', ready: true, files: [{ id: '2:0', name: 'Movie', path: 'Movie.mkv', poster: 'https://image.tmdb.org/t/p/w185/movie.jpg' }] };
+  h.receive({ ...library, magnets: [first, second] });
+  const container = h.nodes.get('magnets');
+  const original = container.children[1], poster = original.children[2].children[1];
+  h.receive({ ...library, magnets: [first, second], deleting: ['1:0'], deletingMagnets: ['1'] });
+  assert.equal(container.children[0].children.at(-1).textContent, 'Deleting…');
+  assert.equal(original.children[1].disabled, false);
+  assert.equal(original.children.at(-1).disabled, false);
+  h.receive({ ...library, libraryRevision: 2, magnets: [second] });
+  assert.equal(container.children.length, 1);
+  assert.equal(container.children[0], original);
+  assert.equal(original.children[2].children[1], poster);
+  assert.equal(h.nodes.get('count').textContent, '1 / 1 magnets · 1 video(s)');
+});
+test('deleting the only search result updates the empty state without losing other files', () => {
+  const h = harness();
+  const magnet = { ...library.magnets[0], files: [library.magnets[0].files[0], { id: '1:1', name: 'Movie', path: 'Movie.mkv' }] };
+  h.nodes.get('search').value = 'episode';
+  h.receive({ ...library, magnets: [magnet] });
+  h.receive({ ...library, libraryRevision: 2, magnets: [{ ...magnet, files: [magnet.files[1]] }] });
+  assert.equal(h.nodes.get('magnets').children[0].textContent, 'No results.');
+  assert.equal(h.nodes.get('count').textContent, '0 / 1 magnets · 1 video(s)');
 });

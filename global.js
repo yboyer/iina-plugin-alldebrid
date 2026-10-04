@@ -29,6 +29,7 @@ function setFiles(magnet, files) {
 }
 let generation = 0;
 let busy = false;
+const deletions = new Map();
 let pinTimer = null;
 let filesById = {};
 // Authentication lasts only for this IINA session.
@@ -43,7 +44,7 @@ try {
   const savedTheme = preferences.get('library-theme');
   if (['system', 'light', 'dark'].includes(savedTheme)) theme = savedTheme;
 } catch (_) {}
-function send() { view.postMessage('state', { ...state, theme, tmdbConfigured: !!tmdbKey }); }
+function send() { view.postMessage('state', { ...state, theme, tmdbConfigured: !!tmdbKey, deleting: Array.from(deletions.keys()), deletingMagnets: Array.from(deletions.values()) }); }
 function valid(token) { return token === generation; }
 function saveKey(key) {
   apiKey = key;
@@ -249,29 +250,39 @@ async function deleteMedia(id, token) {
   const file = filesById[id];
   const magnet = state.magnets.find(item => item.files.some(media => media.id === id));
   if (!file || !magnet) throw new Error('File not found. Refresh the library.');
-  if (magnet.files.length === 1) {
-    state.message = 'Deleting ' + magnet.name + '…'; send();
-    await request('v4/magnet/delete', { id: magnet.id }, apiKey);
+  if (Array.from(deletions.values()).includes(magnet.id)) return;
+  deletions.set(id, magnet.id);
+  send();
+  try {
+    // Let the web view show the pending action before writing preferences.
+    await new Promise(resolve => setTimeout(resolve, 0));
     if (!valid(token)) return;
-    statuses.delete(magnet.id);
-    fileCache.delete(magnet.id);
-    state.magnets = state.magnets.filter(item => item !== magnet);
-  } else {
-    const next = new Set(hiddenMedia);
-    next.add(mediaIdentity(magnet.id, file));
-    try {
-      preferences.set('hidden-media', JSON.stringify(Array.from(next)));
-      preferences.sync();
-    } catch (_) { throw new Error('Unable to save the media deletion. Try again.'); }
-    hiddenMedia = next;
-    magnet.files = magnet.files.filter(media => media.id !== id);
+    if (magnet.files.length === 1) {
+      state.message = 'Deleting ' + magnet.name + '…'; send();
+      await request('v4/magnet/delete', { id: magnet.id }, apiKey);
+      if (!valid(token)) return;
+      statuses.delete(magnet.id);
+      fileCache.delete(magnet.id);
+      state.magnets = state.magnets.filter(item => item !== magnet);
+    } else {
+      const next = new Set(hiddenMedia);
+      next.add(mediaIdentity(magnet.id, file));
+      try {
+        preferences.set('hidden-media', JSON.stringify(Array.from(next)));
+        preferences.sync();
+      } catch (_) { throw new Error('Unable to save the media deletion. Try again.'); }
+      hiddenMedia = next;
+      magnet.files = magnet.files.filter(media => media.id !== id);
+    }
+    delete filesById[id];
+    state.message = 'Deleted ' + file.name;
+    state.libraryRevision = (state.libraryRevision || 0) + 1;
+  } finally {
+    if (valid(token)) { deletions.delete(id); send(); }
   }
-  delete filesById[id];
-  state.message = 'Deleted ' + file.name;
-  updatePosters();
 }
-async function task(action) {
-  if (busy) return;
+async function task(action, duringDeletion = false) {
+  if (busy || (!duringDeletion && deletions.size)) return;
   busy = true; state.busy = true; send();
   const token = generation;
   try { await action(token); }
@@ -282,7 +293,7 @@ function cancel() {
   generation++;
   posterGeneration++;
   if (pinTimer !== null) clearTimeout(pinTimer);
-  pinTimer = null; busy = false;
+  pinTimer = null; busy = false; deletions.clear();
   state.busy = false; delete state.pin;
 }
 async function connect(token) {
@@ -343,8 +354,12 @@ view.onMessage('tmdb-key', value => {
 });
 view.onMessage('refresh', () => task(refresh));
 view.onMessage('connect', () => { if (busy) return; cancel(); task(connect); });
-view.onMessage('play', id => task(token => play(id, token)));
-view.onMessage('delete-media', id => task(token => deleteMedia(id, token)));
+view.onMessage('play', id => task(token => play(id, token), true));
+view.onMessage('delete-media', id => {
+  if (busy) return;
+  const token = generation;
+  deleteMedia(id, token).catch(error => { if (valid(token)) fail(error); });
+});
 view.onMessage('open-pin', () => { if (state.pin) utils.open(state.pin.url); });
 view.onMessage('disconnect', () => {
   try { saveKey(''); } catch (error) { fail(error); return; }

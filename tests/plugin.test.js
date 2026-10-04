@@ -436,9 +436,39 @@ test('failed last-media deletion preserves the video and disconnect ignores a pe
   assert.match(h.state().message, /Unable to connect/);
   let finish;
   h.respond(() => new Promise(resolve => { finish = resolve; }));
-  h.handlers['delete-media']('1:1');
+  h.handlers['delete-media']('1:1'); await tick();
   h.handlers.disconnect();
   finish({}); await tick();
   assert.deepEqual(h.state().magnets, []);
   assert.equal(h.state().message, 'Signed out.');
+});
+
+test('pending deletion is scoped to a magnet, rejects duplicates and allows other playback', async () => {
+  const listing = url => url.endsWith('magnet/status')
+    ? { magnets: [{ id: 1, statusCode: 4 }, { id: 2, statusCode: 4 }] }
+    : { magnets: [{ id: 1, files: [{ n: 'one.mkv', l: 'a' }] }, { id: 2, files: [{ n: 'two.mkv', l: 'b' }] }] };
+  const h = await harness('secret', listing);
+  let finish;
+  h.respond(url => url.endsWith('magnet/delete') ? new Promise(resolve => { finish = resolve; }) : { link: 'https://cdn.example/two.mkv' });
+  h.handlers['delete-media']('1:0'); await tick();
+  assert.equal(h.state().busy, false);
+  assert.deepEqual(h.state().deleting, ['1:0']);
+  h.handlers['delete-media']('1:0');
+  h.handlers.refresh(); await tick();
+  assert.equal(h.calls.length, 1);
+  h.handlers.play('2:0'); await tick();
+  assert.equal(h.opened.length, 1);
+  finish({}); await tick();
+  assert.deepEqual(h.state().deleting, []);
+  assert.deepEqual(h.state().magnets.map(magnet => magnet.id), ['2']);
+});
+test('deletion keeps remaining poster results and does not restart TMDB lookups', async () => {
+  const h = await harness('secret', tmdbLibrary);
+  h.respond(url => url.includes('/search/movie') ? { results: [{ poster_path: '/movie.jpg' }] } : tmdbLibrary(url));
+  h.handlers['tmdb-key']('key'); await tick();
+  const poster = h.state().magnets[0].files[1].poster;
+  const before = h.calls.length;
+  h.handlers['delete-media']('1:0'); await tick();
+  assert.equal(h.calls.length, before);
+  assert.equal(h.state().magnets[0].files[0].poster, poster);
 });
