@@ -15,6 +15,8 @@ Requires IINA 1.4.0 or later on macOS with plugins enabled.
 
 Your account must allow access to magnets and link unlocking. A direct link is generated for each playback request; delayed links are polled for up to ten minutes. Playback depends on file availability and the formats supported by IINA.
 
+**Theme** offers **System**, **Light**, and **Dark**. System follows the macOS appearance. Your choice is saved in the plugin preferences and preserved when signing out.
+
 ## Data and privacy
 
 The API key obtained through PIN authentication is kept **in memory for the current IINA session**. Sign in again after restarting IINA. **Sign out** clears the key and the displayed library and cancels pending operations; it does not revoke the key on AllDebrid. To revoke it, visit https://alldebrid.com/apikeys/.

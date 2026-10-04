@@ -1,4 +1,4 @@
-const { http, menu, standaloneWindow: view, utils, global: players } = iina;
+const { http, menu, standaloneWindow: view, utils, preferences, global: players } = iina;
 const { videos } = require('./library.js');
 const API = 'https://api.alldebrid.com/';
 const FILE_BATCH_SIZE = 100;
@@ -16,7 +16,12 @@ let filesById = {};
 // Authentication lasts only for this IINA session.
 let apiKey = '';
 let state = { connected: !!apiKey, busy: false, magnets: [], message: '' };
-function send() { view.postMessage('state', state); }
+let theme = 'system';
+try {
+  const savedTheme = preferences.get('library-theme');
+  if (['system', 'light', 'dark'].includes(savedTheme)) theme = savedTheme;
+} catch (_) {}
+function send() { view.postMessage('state', { ...state, theme }); }
 function valid(token) { return token === generation; }
 function saveKey(key) {
   apiKey = key;
@@ -185,6 +190,15 @@ view.setProperty({ title: 'AllDebrid Library', resizable: true });
 view.setFrame(900, 650);
 view.loadFile('library.html');
 view.onMessage('ready', () => { send(); if (state.connected && !state.magnets.length) task(refresh); });
+view.onMessage('theme', value => {
+  if (!['system', 'light', 'dark'].includes(value)) return;
+  theme = value;
+  try {
+    preferences.set('library-theme', theme);
+    preferences.sync();
+  } catch (_) { state.message = 'Unable to save the theme preference.'; }
+  send();
+});
 view.onMessage('refresh', () => task(refresh));
 view.onMessage('connect', () => { if (busy) return; cancel(); task(connect); });
 view.onMessage('play', id => task(token => play(id, token)));

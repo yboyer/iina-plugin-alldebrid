@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const { videos } = require('../library');
 const tick = () => new Promise(resolve => setImmediate(resolve));
-async function harness(key = 'secret', initialResponse = () => ({ magnets: [] })) {
+async function harness(key = 'secret', initialResponse = () => ({ magnets: [] }), storage = {}) {
   const handlers = {}, calls = [], opened = [], timers = [];
   let lastState;
   let onMainThread = false, deferPlayback = false;
@@ -32,6 +32,7 @@ async function harness(key = 'secret', initialResponse = () => ({ magnets: [] })
     clearTimeout: id => { timers[id - 1] = null; },
     iina: {
       http: { get: request, post: request },
+      preferences: { get: name => storage[name], set: (name, value) => { storage[name] = value; }, sync() {} },
       menu: { item: (name, fn) => fn, addItem() {} },
       standaloneWindow: { setProperty() {}, setFrame() {}, loadFile() {}, open() {}, onMessage: (name, fn) => { handlers[name] = fn; }, postMessage: (_, state) => { lastState = JSON.parse(JSON.stringify(state)); } },
       utils: { open() {} },
@@ -256,4 +257,25 @@ test('PIN polling stops on definitive errors, expiry and sign-out', async () => 
     assert.equal(h.state().pin, undefined);
     assert.equal(h.state().connected, false);
   }
+});
+
+
+test('theme preference persists across restart and sign-out, and rejects invalid values', async () => {
+  const storage = {};
+  const h = await harness('', undefined, storage);
+  h.handlers.ready();
+  assert.equal(h.state().theme, 'system');
+  h.handlers.theme('dark');
+  assert.equal(storage['library-theme'], 'dark');
+  h.handlers.disconnect();
+  assert.equal(h.state().theme, 'dark');
+  h.handlers.theme('invalid');
+  assert.equal(storage['library-theme'], 'dark');
+  const reopened = await harness('', undefined, storage);
+  reopened.handlers.ready();
+  assert.equal(reopened.state().theme, 'dark');
+  reopened.handlers.theme('light');
+  assert.equal(reopened.state().theme, 'light');
+  reopened.handlers.theme('system');
+  assert.equal(storage['library-theme'], 'system');
 });

@@ -16,6 +16,9 @@ function size(bytes) {
   return (bytes / unit).toFixed(1) + (unit === 1073741824 ? ' GiB' : ' MiB');
 }
 function render() {
+  const theme = ['light', 'dark'].includes(state.theme) ? state.theme : 'system';
+  document.documentElement.dataset.theme = theme;
+  el('theme').value = theme;
   el('auth').hidden = state.connected;
   el('tools').hidden = !state.connected;
   el('refresh').hidden = el('disconnect').hidden = !state.connected && !state.pin;
@@ -80,6 +83,11 @@ function render() {
 }
 for (const action of ['refresh', 'connect', 'disconnect']) el(action).addEventListener('click', () => iina.postMessage(action, null));
 el('pin-link').addEventListener('click', event => { event.preventDefault(); iina.postMessage('open-pin', null); });
+el('theme').addEventListener('change', () => {
+  state.theme = el('theme').value;
+  render();
+  iina.postMessage('theme', state.theme);
+});
 el('search').addEventListener('input', render);
 el('ready-only').addEventListener('change', render);
 iina.onMessage('state', value => { state = value; render(); });
