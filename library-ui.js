@@ -20,7 +20,6 @@ function render() {
   el('tools').hidden = !state.connected;
   el('refresh').hidden = el('disconnect').hidden = !state.connected && !state.pin;
   el('refresh').disabled = state.busy || !state.connected;
-  el('clear-cache').disabled = state.busy;
   el('connect').disabled = state.busy || !!state.pin;
   el('message').textContent = state.message || '';
   el('pin').hidden = !state.pin;
@@ -79,7 +78,7 @@ function render() {
     container.append(emptyMessage);
   }
 }
-for (const action of ['refresh', 'clear-cache', 'connect', 'disconnect']) el(action).addEventListener('click', () => iina.postMessage(action, null));
+for (const action of ['refresh', 'connect', 'disconnect']) el(action).addEventListener('click', () => iina.postMessage(action, null));
 el('pin-link').addEventListener('click', event => { event.preventDefault(); iina.postMessage('open-pin', null); });
 el('search').addEventListener('input', render);
 el('ready-only').addEventListener('change', render);

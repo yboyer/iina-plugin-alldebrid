@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const { videos } = require('../library');
 const tick = () => new Promise(resolve => setImmediate(resolve));
-async function harness(key = 'secret', storage = {}, username = 'test-user', initialResponse = () => ({ magnets: [] })) {
+async function harness(key = 'secret', initialResponse = () => ({ magnets: [] })) {
   const handlers = {}, calls = [], opened = [], timers = [];
   let lastState;
   let onMainThread = false, deferPlayback = false;
@@ -13,7 +13,7 @@ async function harness(key = 'secret', storage = {}, username = 'test-user', ini
   let response = () => ({ magnets: [] });
   const request = async (url, options) => {
     calls.push({ url, options });
-    const body = url.endsWith('/user') ? { user: { username } } : await response(url, options);
+    const body = await response(url, options);
     return { text: JSON.stringify({ status: 'success', data: body }), statusCode: 200 };
   };
   const context = {
@@ -32,7 +32,6 @@ async function harness(key = 'secret', storage = {}, username = 'test-user', ini
     clearTimeout: id => { timers[id - 1] = null; },
     iina: {
       http: { get: request, post: request },
-      preferences: { get: name => storage[name], set: (name, value) => { storage[name] = value; }, sync() {} },
       menu: { item: (name, fn) => fn, addItem() {} },
       standaloneWindow: { setProperty() {}, setFrame() {}, loadFile() {}, open() {}, onMessage: (name, fn) => { handlers[name] = fn; }, postMessage: (_, state) => { lastState = JSON.parse(JSON.stringify(state)); } },
       utils: { open() {} },
@@ -154,54 +153,24 @@ test('817 ready magnets use nine file requests with indexed form fields', async 
   assert.equal(Object.keys(requests[8].options.data).length, 17);
   assert.equal(h.state().magnets.filter(magnet => magnet.files.length === 1).length, 817);
 });
-test('cache survives a new IINA session and a new API key, including playback', async () => {
-  const storage = {};
-  const first = await harness('first-secret', storage);
-  first.respond(libraryResponse([{ id: 1, filename: 'Film', hash: 'a', statusCode: 4 }]));
-  first.handlers.refresh(); await tick();
-  assert.ok(storage['library-cache-v1']);
-  assert.doesNotMatch(storage['library-cache-v1'], /first-secret|cdn\.example/);
-  const second = await harness('second-secret', storage, 'test-user', libraryResponse([{ id: 1, filename: 'Film', hash: 'a', statusCode: 4 }]));
-  assert.equal(second.bootCalls.filter(call => call.url.endsWith('magnet/files')).length, 0);
-  second.respond(libraryResponse([{ id: 1, filename: 'Film', hash: 'a', statusCode: 4 }]));
-  second.handlers.refresh(); await tick();
-  assert.equal(second.calls.length, 1);
-  assert.equal(second.state().magnets[0].files.length, 1);
-  second.handlers.play('1:0'); await tick();
-  assert.equal(second.calls.at(-1).options.data.link, 'https://alldebrid.com/f/1');
-  assert.equal(second.opened[0].url, 'https://cdn.example/film.mp4');
-});
-test('cache reloads expired and changed files and removes missing or non-ready magnets', async () => {
-  const storage = {};
-  const h = await harness('secret', storage);
-  h.respond(libraryResponse([1, 2, 3, 4].map(id => ({ id, hash: 'original', statusCode: 4 }))));
+test('each refresh reloads unchanged magnets and replaces their playback links', async () => {
+  const h = await harness();
+  h.respond(libraryResponse([{ id: 1, statusCode: 4 }]));
   h.handlers.refresh(); await tick();
-  const cache = JSON.parse(storage['library-cache-v1']);
-  cache.entries['1'].savedAt = Date.now() - 25 * 60 * 60 * 1000;
-  storage['library-cache-v1'] = JSON.stringify(cache);
-  const next = await harness('secret', storage, 'test-user', libraryResponse([{ id: 1, hash: 'original', statusCode: 4 }, { id: 2, hash: 'changed', statusCode: 4 }, { id: 3, statusCode: 1 }]));
-  assert.deepEqual(JSON.parse(JSON.stringify(next.bootCalls.at(-1).options.data)), { 'id[0]': '1', 'id[1]': '2' });
-  assert.deepEqual(Object.keys(JSON.parse(storage['library-cache-v1']).entries), ['1', '2']);
-  assert.deepEqual(next.state().magnets[2].files, []);
+  h.calls.length = 0;
+  h.respond(url => {
+    if (url.endsWith('magnet/status')) return { magnets: [{ id: 1, statusCode: 4 }] };
+    if (url.endsWith('magnet/files')) return { magnets: [{ id: 1, files: [{ n: 'updated.mp4', l: 'new-link' }] }] };
+    return { link: 'https://cdn.example/updated.mp4' };
+  });
+  h.handlers.refresh(); await tick();
+  assert.equal(h.calls.length, 2);
+  assert.equal(h.state().magnets[0].files[0].name, 'updated.mp4');
+  h.handlers.play('1:0'); await tick();
+  assert.equal(h.calls.at(-1).options.data.link, 'new-link');
+  assert.equal(h.opened[0].url, 'https://cdn.example/updated.mp4');
 });
-test('cache is isolated by account and corrupt cache is ignored', async () => {
-  const storage = {};
-  const first = await harness('secret', storage, 'alice');
-  first.respond(libraryResponse([{ id: 1, statusCode: 4 }]));
-  first.handlers.refresh(); await tick();
-  const second = await harness('other-secret', storage, 'bob', libraryResponse([{ id: 1, statusCode: 4 }]));
-  assert.equal(second.bootCalls.filter(call => call.url.endsWith('magnet/files')).length, 1);
-  second.respond(libraryResponse([{ id: 1, statusCode: 4 }]));
-  second.handlers.refresh(); await tick();
-  assert.equal(second.calls.length, 1);
-  assert.equal(JSON.parse(storage['library-cache-v1']).account, 'bob');
-  storage['library-cache-v1'] = '{invalid';
-  const third = await harness('secret', storage, 'bob');
-  third.respond(libraryResponse([{ id: 1, statusCode: 4 }]));
-  third.handlers.refresh(); await tick();
-  assert.equal(third.state().magnets[0].files.length, 1);
-});
-test('failed batches are retried while successful cached files are reused', async () => {
+test('each refresh reloads all batches after a partial failure', async () => {
   const h = await harness();
   const magnets = Array.from({ length: 101 }, (_, index) => ({ id: index + 1, statusCode: 4 }));
   const respond = libraryResponse(magnets);
@@ -214,21 +183,19 @@ test('failed batches are retried while successful cached files are reused', asyn
   h.calls.length = 0;
   h.respond(respond);
   h.handlers.refresh(); await tick();
-  assert.equal(h.calls.length, 2);
+  assert.equal(h.calls.length, 3);
   assert.equal(Object.keys(h.calls[1].options.data).length, 100);
+  assert.equal(Object.keys(h.calls[2].options.data).length, 1);
   assert.equal(h.state().magnets.every(magnet => magnet.files.length === 1 && !magnet.error), true);
 });
-test('sign-out clears persistent cache and ignores pending file responses', async () => {
-  const storage = {};
-  const h = await harness('secret', storage);
+test('sign-out ignores pending file responses', async () => {
+  const h = await harness();
   let finish;
   h.respond(url => url.endsWith('magnet/status') ? { magnets: [{ id: 1, statusCode: 4 }] } : new Promise(resolve => { finish = resolve; }));
   h.handlers.refresh(); await tick();
   h.handlers.disconnect();
   finish({ magnets: [{ id: 1, files: [{ n: 'private.mp4', l: 'x' }] }] }); await tick();
   assert.deepEqual(h.state().magnets, []);
-  assert.deepEqual(JSON.parse(storage['library-cache-v1']).entries, {});
-  assert.equal(JSON.parse(storage['library-cache-v1']).account, '');
 });
 
 test('disconnect cancels playback queued for the main thread', async () => {
@@ -289,39 +256,4 @@ test('PIN polling stops on definitive errors, expiry and sign-out', async () => 
     assert.equal(h.state().pin, undefined);
     assert.equal(h.state().connected, false);
   }
-});
-
-test('clear cache preserves sign-in and playback but reloads files on the next refresh', async () => {
-  const storage = {};
-  const h = await harness('secret', storage);
-  h.respond(libraryResponse([{ id: 1, statusCode: 4 }]));
-  h.handlers.refresh(); await tick();
-  h.calls.length = 0;
-  h.handlers['clear-cache']();
-  assert.deepEqual(JSON.parse(storage['library-cache-v1']).entries, {});
-  assert.equal(h.state().connected, true);
-  assert.equal(h.state().magnets[0].files.length, 1);
-  assert.equal(h.calls.length, 0);
-  h.handlers.play('1:0'); await tick();
-  assert.equal(h.opened.length, 1);
-  h.calls.length = 0;
-  h.handlers.refresh(); await tick();
-  assert.equal(h.calls.filter(call => call.url.endsWith('magnet/files')).length, 1);
-});
-
-test('clear cache works before sign-in and ignores requests while busy', async () => {
-  const storage = { 'library-cache-v1': JSON.stringify({ version: 1, account: 'old', entries: { private: {} } }) };
-  const h = await harness('', storage);
-  h.handlers['clear-cache']();
-  assert.deepEqual(JSON.parse(storage['library-cache-v1']).entries, {});
-  assert.equal(h.state().connected, false);
-  const connected = await harness('secret', storage);
-  let finish;
-  connected.respond(() => new Promise(resolve => { finish = resolve; }));
-  connected.handlers.refresh();
-  const before = storage['library-cache-v1'];
-  connected.handlers['clear-cache']();
-  assert.equal(storage['library-cache-v1'], before);
-  assert.equal(connected.state().busy, true);
-  finish({ magnets: [] }); await tick();
 });

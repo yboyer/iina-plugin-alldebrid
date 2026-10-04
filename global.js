@@ -1,34 +1,7 @@
-const { http, menu, standaloneWindow: view, utils, preferences, global: players } = iina;
+const { http, menu, standaloneWindow: view, utils, global: players } = iina;
 const { videos } = require('./library.js');
 const API = 'https://api.alldebrid.com/';
-const CACHE_KEY = 'library-cache-v1';
-const CACHE_TTL = 24 * 60 * 60 * 1000;
 const FILE_BATCH_SIZE = 100;
-let account = '';
-let cache = { version: 1, account: '', entries: {} };
-let cacheWarning = '';
-function loadCache() {
-  try {
-    const stored = JSON.parse(preferences.get(CACHE_KEY) || 'null');
-    if (stored && stored.version === 1 && stored.account === account && stored.entries && typeof stored.entries === 'object') cache = stored;
-    else cache = { version: 1, account, entries: {} };
-  } catch (_) { cache = { version: 1, account, entries: {} }; }
-}
-function persistCache() {
-  try {
-    preferences.set(CACHE_KEY, JSON.stringify(cache));
-    preferences.sync();
-  } catch (_) { cacheWarning = ' Unable to save the library cache.'; }
-}
-function fingerprint(magnet) {
-  return JSON.stringify([magnet.hash, magnet.filename, magnet.size, magnet.uploadDate]);
-}
-function cachedFiles(entry, signature) {
-  return entry && entry.signature === signature && Number.isFinite(entry.savedAt) &&
-    Date.now() >= entry.savedAt && Date.now() - entry.savedAt < CACHE_TTL &&
-    Array.isArray(entry.files) && entry.files.every(file => file && typeof file.name === 'string' &&
-      typeof file.path === 'string' && typeof file.link === 'string');
-}
 function setFiles(magnet, files) {
   magnet.files = files.map((file, index) => {
     const id = magnet.id + ':' + index;
@@ -88,33 +61,17 @@ async function request(path, data, key, get) {
 async function refresh(token) {
   const key = apiKey;
   if (!key) throw new Error('Connect your AllDebrid account.');
-  cacheWarning = '';
-  if (!account) {
-    const user = await request('v4/user', {}, key, true);
-    if (!valid(token)) return;
-    if (!user.user || typeof user.user.username !== 'string' || !user.user.username) throw new Error('Unable to identify the AllDebrid account.');
-    account = user.user.username;
-    loadCache();
-  }
   state.message = 'Loading magnets…'; send();
   const data = await request('v4.1/magnet/status', {}, key);
   if (!valid(token)) return;
   const magnets = Array.isArray(data.magnets) ? data.magnets : data.magnets ? [data.magnets] : [];
   filesById = {};
-  const pending = [], entries = {};
+  const pending = [];
   state.magnets = magnets.slice().sort((a, b) => (Number(b.uploadDate) || 0) - (Number(a.uploadDate) || 0)).map(m => {
     const magnet = { id: String(m.id), name: m.filename, status: m.status, ready: Number(m.statusCode) === 4, files: [] };
-    if (magnet.ready) {
-      const signature = fingerprint(m);
-      const entry = cache.entries[magnet.id];
-      if (cachedFiles(entry, signature)) {
-        entries[magnet.id] = entry;
-        setFiles(magnet, entry.files);
-      } else pending.push({ magnet, signature });
-    }
+    if (magnet.ready) pending.push(magnet);
     return magnet;
   });
-  cache.entries = entries;
   state.libraryRevision = (state.libraryRevision || 0) + 1;
   send();
   let errors = 0;
@@ -125,7 +82,7 @@ async function refresh(token) {
     const batch = pending.slice(offset, offset + FILE_BATCH_SIZE);
     const ids = {};
     // Indexed form fields avoid relying on IINA's array serialization.
-    batch.forEach(({ magnet }, index) => { ids['id[' + index + ']'] = magnet.id; });
+    batch.forEach((magnet, index) => { ids['id[' + index + ']'] = magnet.id; });
     let items;
     try {
       const tree = await request('v4/magnet/files', ids, key);
@@ -135,7 +92,7 @@ async function refresh(token) {
       if (!valid(token)) return;
       items = new Map();
     }
-    for (const { magnet, signature } of batch) {
+    for (const magnet of batch) {
       const item = items.get(magnet.id);
       if (!item || item.error || !Array.isArray(item.files)) {
         magnet.error = 'Unable to load files. Refresh to try again.';
@@ -144,15 +101,12 @@ async function refresh(token) {
       }
       const files = videos(item.files);
       setFiles(magnet, files);
-      cache.entries[magnet.id] = { signature, savedAt: Date.now(), files };
     }
-    persistCache();
     state.libraryRevision++;
     state.message = 'Loading files: ' + Math.min(offset + batch.length, pending.length) + ' / ' + pending.length;
     send();
   }
-  if (!pending.length) persistCache();
-  state.message = (errors ? errors + ' magnet(s) could not be loaded.' : 'Library up to date.') + cacheWarning;
+  state.message = errors ? errors + ' magnet(s) could not be loaded.' : 'Library up to date.';
 }
 async function play(id, token) {
   const file = filesById[id];
@@ -232,22 +186,12 @@ view.setFrame(900, 650);
 view.loadFile('library.html');
 view.onMessage('ready', () => { send(); if (state.connected && !state.magnets.length) task(refresh); });
 view.onMessage('refresh', () => task(refresh));
-view.onMessage('clear-cache', () => {
-  if (busy) return;
-  cacheWarning = '';
-  cache = { version: 1, account, entries: {} };
-  persistCache();
-  state.message = cacheWarning ? 'Unable to clear the library cache.' : 'Cache cleared. Refresh to reload files.';
-  send();
-});
 view.onMessage('connect', () => { if (busy) return; cancel(); task(connect); });
 view.onMessage('play', id => task(token => play(id, token)));
 view.onMessage('open-pin', () => { if (state.pin) utils.open(state.pin.url); });
 view.onMessage('disconnect', () => {
   try { saveKey(''); } catch (error) { fail(error); return; }
-  cancel(); filesById = {}; account = '';
-  cache = { version: 1, account: '', entries: {} };
-  persistCache();
+  cancel(); filesById = {};
   state = { connected: false, busy: false, magnets: [], message: 'Signed out.' }; send();
 });
 menu.addItem(menu.item('AllDebrid Library…', () => view.open()));

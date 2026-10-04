@@ -61,17 +61,3 @@ test('search loads matching paths, revisions preserve expansion, and empty state
   assert.equal(h.nodes.get('magnets').children[0], empty);
   assert.equal(empty.hidden, false);
 });
-
-test('clear cache is available before sign-in and disabled during operations', () => {
-  const h = harness();
-  h.receive({ connected: false, busy: false, magnets: [] });
-  const button = h.nodes.get('clear-cache');
-  assert.equal(button.disabled, false);
-  assert.notEqual(button.hidden, true);
-  button.listeners.click();
-  assert.deepEqual(h.messages.at(-1), ['clear-cache', null]);
-  h.receive({ ...library, busy: true });
-  assert.equal(button.disabled, true);
-  h.receive(library);
-  assert.equal(button.disabled, false);
-});
