@@ -103,6 +103,19 @@ test('TMDB settings clear submitted key and posters load lazily with failure fal
   assert.equal(placeholder.textContent, 'No poster');
 });
 
+test('missing posters retain a placeholder for movies and episodes with or without TMDB', () => {
+  for (const tmdbConfigured of [false, true]) {
+    for (const metadata of [{ title: 'Movie' }, { title: 'Series', season: 3, episode: 1 }]) {
+      const h = harness();
+      h.receive({ ...library, tmdbConfigured, magnets: [{ ...library.magnets[0], files: [{ ...library.magnets[0].files[0], metadata }] }] });
+      const slot = h.nodes.get('magnets').children[0].children[2];
+      assert.equal(slot.className, 'poster-slot');
+      assert.equal(slot.children.length, 1);
+      assert.equal(slot.children[0].textContent, 'No poster');
+    }
+  }
+});
+
 test('poster lookup has a placeholder and unavailable magnets retain status without collapse', () => {
   const h = harness();
   h.receive({ ...library, tmdbConfigured: true, magnets: [{ ...library.magnets[0], files: [{ ...library.magnets[0].files[0], posterPending: true }] }] });

@@ -102,22 +102,20 @@ function render() {
       });
       row.append(info, button);
       const hasPoster = /^https:\/\/image\.tmdb\.org\/t\/p\/w185\/[a-zA-Z0-9_-]+\.(jpg|png)$/.test(file.poster || '');
-      if (hasPoster || (state.tmdbConfigured && meta.season === undefined)) {
-        const slot = text('div', '', 'poster-slot');
-        const placeholder = text('span', file.posterPending || hasPoster ? 'Loading poster…' : 'No poster', 'poster-placeholder');
-        slot.append(placeholder);
-        if (hasPoster) {
-          const poster = document.createElement('img');
-          poster.className = 'poster';
-          poster.alt = 'Poster: ' + (meta.title || file.name);
-          poster.loading = 'lazy'; poster.referrerPolicy = 'no-referrer';
-          poster.addEventListener('load', () => { placeholder.hidden = true; });
-          poster.addEventListener('error', () => { poster.hidden = true; placeholder.hidden = false; placeholder.textContent = 'No poster'; });
-          poster.src = file.poster;
-          slot.append(poster);
-        }
-        row.append(slot);
+      const slot = text('div', '', 'poster-slot');
+      const placeholder = text('span', file.posterPending || hasPoster ? 'Loading poster…' : 'No poster', 'poster-placeholder');
+      slot.append(placeholder);
+      if (hasPoster) {
+        const poster = document.createElement('img');
+        poster.className = 'poster';
+        poster.alt = 'Poster: ' + (meta.title || file.name);
+        poster.loading = 'lazy'; poster.referrerPolicy = 'no-referrer';
+        poster.addEventListener('load', () => { placeholder.hidden = true; });
+        poster.addEventListener('error', () => { poster.hidden = true; placeholder.hidden = false; placeholder.textContent = 'No poster'; });
+        poster.src = file.poster;
+        slot.append(poster);
       }
+      row.append(slot);
       row.append(remove);
       nextRows.set(file.id, { signature, row, buttons: [button, remove] });
       desired.push(row);
