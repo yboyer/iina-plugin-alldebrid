@@ -82,7 +82,6 @@ function render() {
       const info = text('div', meta.title || file.name, 'file-info');
       if (labels.length) info.append(text('small', labels.join(' · ')));
       info.append(text('small', file.path + ' · ' + size(file.size)));
-      info.append(text('small', magnet.name || 'Untitled', 'torrent-name'));
       const button = text('button', 'Play'); button.disabled = state.busy;
       mediaButtons.push(button);
       button.addEventListener('click', () => iina.postMessage('play', file.id));

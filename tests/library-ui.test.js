@@ -28,13 +28,13 @@ function harness() {
 }
 const library = { connected: true, busy: false, libraryRevision: 1, magnets: [{ id: '1', name: 'Series', ready: true, files: [{ id: '1:0', name: 'Episode', path: 'Season/Episode.mkv', size: 42 }] }] };
 
-test('videos render directly with torrent name below path and preserve rows across busy changes', () => {
+test('videos render directly without torrent name below path and preserve rows across busy changes', () => {
   const h = harness();
   h.receive(library);
   const row = h.nodes.get('magnets').children[0], button = row.children[1];
   assert.equal(row.tag, 'article');
   assert.equal(row.children[0].children[0].textContent, 'Season/Episode.mkv · 0.0 MiB');
-  assert.equal(row.children[0].children[1].textContent, 'Series');
+  assert.equal(row.children[0].children.length, 1);
   button.listeners.click();
   assert.deepEqual(h.messages.at(-1), ['play', '1:0']);
   h.receive({ ...library, busy: true });
