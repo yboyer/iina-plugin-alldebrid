@@ -11,26 +11,40 @@ const TRANSFER_FIELDS = new Set(['status', 'downloaded', 'uploaded', 'downloadSp
 function fileSignature(magnet) {
   return JSON.stringify(Object.keys(magnet).filter(key => !TRANSFER_FIELDS.has(key)).sort().map(key => [key, magnet[key]]));
 }
+let hiddenMedia = new Set();
+try {
+  const saved = JSON.parse(preferences.get('hidden-media') || '[]');
+  if (Array.isArray(saved)) hiddenMedia = new Set(saved.filter(value => typeof value === 'string'));
+} catch (_) {}
+function mediaIdentity(magnetId, file) {
+  return JSON.stringify([magnetId, file.path, file.size]);
+}
 function setFiles(magnet, files) {
   magnet.files = files.map((file, index) => {
     const id = magnet.id + ':' + index;
+    if (hiddenMedia.has(mediaIdentity(magnet.id, file))) return null;
     filesById[id] = file;
     return { id, name: file.name, path: file.path, size: file.size, metadata: metadata(file.name) };
-  });
+  }).filter(Boolean);
 }
 let generation = 0;
 let busy = false;
+const deletions = new Map();
 let pinTimer = null;
 let filesById = {};
 // Authentication lasts only for this IINA session.
 let apiKey = '';
 let state = { connected: !!apiKey, busy: false, magnets: [], message: '' };
+let tmdbKey = '';
+let posterGeneration = 0;
+let posterCache = new Map();
+try { tmdbKey = preferences.get('tmdb-api-key') || ''; } catch (_) {}
 let theme = 'system';
 try {
   const savedTheme = preferences.get('library-theme');
   if (['system', 'light', 'dark'].includes(savedTheme)) theme = savedTheme;
 } catch (_) {}
-function send() { view.postMessage('state', { ...state, theme }); }
+function send() { view.postMessage('state', { ...state, theme, tmdbConfigured: !!tmdbKey, deleting: Array.from(deletions.keys()), deletingMagnets: Array.from(deletions.values()) }); }
 function valid(token) { return token === generation; }
 function saveKey(key) {
   apiKey = key;
@@ -72,7 +86,63 @@ async function request(path, data, key, get) {
   }
   return body.data;
 }
+function posterIdentity(meta) {
+  return JSON.stringify([meta.title, meta.year || null]);
+}
+async function loadPosters(token, revision) {
+  const key = tmdbKey;
+  if (!key) return;
+  const current = () => valid(token) && revision === posterGeneration;
+  const files = state.magnets.flatMap(magnet => magnet.files).filter(file => file.metadata.title && file.metadata.season === undefined);
+  let failed = false;
+  for (const file of files) {
+    if (!current()) return;
+    const identity = posterIdentity(file.metadata);
+    if (!posterCache.has(identity)) {
+      let url = 'https://api.themoviedb.org/3/search/movie?api_key=' + encodeURIComponent(key)
+        + '&language=fr-FR&include_adult=false&query=' + encodeURIComponent(file.metadata.title);
+      if (file.metadata.year) url += '&primary_release_year=' + file.metadata.year;
+      try {
+        await new Promise(resolve => setTimeout(resolve, 150));
+        if (!current()) return;
+        const response = await http.get(url, {});
+        if (!current()) return;
+        if (response.statusCode !== 200) throw new Error('TMDB request failed');
+        const body = JSON.parse(response.text);
+        if (!Array.isArray(body.results)) throw new Error('Invalid TMDB response');
+        const movie = body.results.find(movie => typeof movie.poster_path === 'string' && /^\/[a-zA-Z0-9_-]+\.(jpg|png)$/.test(movie.poster_path));
+        posterCache.set(identity, movie ? 'https://image.tmdb.org/t/p/w185' + movie.poster_path : null);
+      } catch (_) {
+        if (!current()) return;
+        failed = true;
+        // Keep failures out of the cache so Refresh can retry them.
+        break;
+      }
+    }
+    file.poster = posterCache.get(identity);
+    file.posterPending = false;
+    state.libraryRevision = (state.libraryRevision || 0) + 1;
+    send();
+  }
+  if (!current()) return;
+  state.libraryRevision = (state.libraryRevision || 0) + 1;
+  for (const file of files) file.posterPending = false;
+  state.tmdbMessage = failed ? 'Unable to load TMDB posters. Check your API key and refresh to retry.' : '';
+  send();
+}
+function updatePosters() {
+  const revision = ++posterGeneration;
+  for (const magnet of state.magnets) for (const file of magnet.files) {
+    const identity = posterIdentity(file.metadata);
+    file.poster = tmdbKey && posterCache.get(identity) || null;
+    file.posterPending = !!tmdbKey && file.metadata.season === undefined && !!file.metadata.title && !posterCache.has(identity);
+  }
+  state.libraryRevision = (state.libraryRevision || 0) + 1;
+  send();
+  loadPosters(generation, revision);
+}
 async function refresh(token) {
+  posterGeneration++;
   const key = apiKey;
   if (!key) throw new Error('Connect your AllDebrid account.');
   state.message = 'Loading magnets…'; send();
@@ -142,6 +212,7 @@ async function refresh(token) {
     send();
   }
   state.message = errors ? errors + ' magnet(s) could not be loaded.' : 'Library up to date.';
+  updatePosters();
 }
 async function play(id, token) {
   const file = filesById[id];
@@ -175,8 +246,43 @@ async function play(id, token) {
     } catch (error) { reject(error); }
   }, 0));
 }
-async function task(action) {
-  if (busy) return;
+async function deleteMedia(id, token) {
+  const file = filesById[id];
+  const magnet = state.magnets.find(item => item.files.some(media => media.id === id));
+  if (!file || !magnet) throw new Error('File not found. Refresh the library.');
+  if (Array.from(deletions.values()).includes(magnet.id)) return;
+  deletions.set(id, magnet.id);
+  send();
+  try {
+    // Let the web view show the pending action before writing preferences.
+    await new Promise(resolve => setTimeout(resolve, 0));
+    if (!valid(token)) return;
+    if (magnet.files.length === 1) {
+      state.message = 'Deleting ' + magnet.name + '…'; send();
+      await request('v4/magnet/delete', { id: magnet.id }, apiKey);
+      if (!valid(token)) return;
+      statuses.delete(magnet.id);
+      fileCache.delete(magnet.id);
+      state.magnets = state.magnets.filter(item => item !== magnet);
+    } else {
+      const next = new Set(hiddenMedia);
+      next.add(mediaIdentity(magnet.id, file));
+      try {
+        preferences.set('hidden-media', JSON.stringify(Array.from(next)));
+        preferences.sync();
+      } catch (_) { throw new Error('Unable to save the media deletion. Try again.'); }
+      hiddenMedia = next;
+      magnet.files = magnet.files.filter(media => media.id !== id);
+    }
+    delete filesById[id];
+    state.message = 'Deleted ' + file.name;
+    state.libraryRevision = (state.libraryRevision || 0) + 1;
+  } finally {
+    if (valid(token)) { deletions.delete(id); send(); }
+  }
+}
+async function task(action, duringDeletion = false) {
+  if (busy || (!duringDeletion && deletions.size)) return;
   busy = true; state.busy = true; send();
   const token = generation;
   try { await action(token); }
@@ -185,8 +291,9 @@ async function task(action) {
 }
 function cancel() {
   generation++;
+  posterGeneration++;
   if (pinTimer !== null) clearTimeout(pinTimer);
-  pinTimer = null; busy = false;
+  pinTimer = null; busy = false; deletions.clear();
   state.busy = false; delete state.pin;
 }
 async function connect(token) {
@@ -229,14 +336,35 @@ view.onMessage('theme', value => {
   } catch (_) { state.message = 'Unable to save the theme preference.'; }
   send();
 });
+view.onMessage('tmdb-key', value => {
+  if (typeof value !== 'string') return;
+  const key = value.trim();
+  try {
+    preferences.set('tmdb-api-key', key);
+    preferences.sync();
+  } catch (_) {
+    state.tmdbMessage = 'Unable to save the TMDB API key.';
+    send();
+    return;
+  }
+  tmdbKey = key;
+  posterCache = new Map();
+  state.tmdbMessage = key ? 'TMDB enabled.' : 'TMDB disabled.';
+  updatePosters();
+});
 view.onMessage('refresh', () => task(refresh));
 view.onMessage('connect', () => { if (busy) return; cancel(); task(connect); });
-view.onMessage('play', id => task(token => play(id, token)));
+view.onMessage('play', id => task(token => play(id, token), true));
+view.onMessage('delete-media', id => {
+  if (busy) return;
+  const token = generation;
+  deleteMedia(id, token).catch(error => { if (valid(token)) fail(error); });
+});
 view.onMessage('open-pin', () => { if (state.pin) utils.open(state.pin.url); });
 view.onMessage('disconnect', () => {
   try { saveKey(''); } catch (error) { fail(error); return; }
   cancel(); filesById = {};
-  statuses = new Map(); fileCache = new Map(); statusCounter = 0;
+  statuses = new Map(); fileCache = new Map(); posterCache = new Map(); statusCounter = 0;
   statusSession = Math.floor(Math.random() * 2147483647) + 1;
   state = { connected: false, busy: false, magnets: [], message: 'Signed out.' }; send();
 });

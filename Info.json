@@ -13,6 +13,8 @@
   ],
   "allowedDomains": [
     "api.alldebrid.com",
-    "*.debrid.it"
+    "*.debrid.it",
+    "api.themoviedb.org",
+    "image.tmdb.org"
   ]
 }
