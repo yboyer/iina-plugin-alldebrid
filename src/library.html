@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1" name="viewport" >
+<title>AllDebrid Library</title>
+<link href="library.css" rel="stylesheet" >
+</head>
+<body>
+<header><div><h1>AllDebrid</h1><p>Your magnets and videos</p></div><div class="actions"><label class="theme-control">Theme <select aria-label="Theme" id="theme" ><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select></label><button id="refresh" type="button" >Refresh</button><button id="disconnect" type="button" >Sign out</button></div></header>
+<section id="auth"><h2>Connect your account</h2><p>Sign in using a PIN. No password needed here.</p><button id="connect" type="button" >Sign in to AllDebrid</button><div hidden id="pin" ><p>Code: <strong id="code"></strong></p><a href="https://alldebrid.com/pin/" id="pin-link" rel="noopener noreferrer" target="_blank" >Confirm on AllDebrid ↗</a></div></section>
+<div id="tools"><input aria-label="Search" id="search" placeholder="Search for a video or magnet…" type="search" ><label><input id="ready-only" type="checkbox"> Ready only</label></div>
+<section aria-label="TMDB settings" class="tmdb-settings" >
+<label for="tmdb-key">TMDB API key</label>
+<input autocomplete="off" id="tmdb-key" placeholder="API key (v3)" type="password" >
+<button id="tmdb-save" type="button" >Save</button>
+<p id="tmdb-status" role="status"></p>
+<small>The key is saved in plugin preferences. Movie/series titles, years, and season/episode numbers are sent to TMDB.</small>
+</section>
+<p aria-live="polite" id="message" role="status" ></p>
+<p id="count"></p>
+<main id="magnets"></main>
+<script src="library-ui.js"></script>
+</body>
+</html>

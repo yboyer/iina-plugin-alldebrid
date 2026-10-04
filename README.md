@@ -1,50 +1,65 @@
 # AllDebrid for IINA
 
-A library with optional TMDB movie posters: all magnets in your account, videos in nested folders, search, a ready-only filter, file sizes, and playback in a new IINA window.
+Browse your AllDebrid videos and play them in IINA. Includes search, a ready-only filter, file details, and optional TMDB titles and posters.
+
+![AllDebrid library in IINA](.github/alldebrid-library.png)
 
 ## Installation
 
-Requires IINA 1.4.0 or later on macOS with plugins enabled.
+Requires **IINA 1.4.0+** on macOS with plugins enabled, **Node.js 24+**, and **Python 3**.
 
-1. Run `/Applications/IINA.app/Contents/MacOS/iina-plugin link .` from the repository directory.
+```sh
+npm ci
+npm run pack
+```
+
+1. Open `dist/alldebrid.iinaplgz` to install the plugin.
 2. Open **Plugins → AllDebrid → AllDebrid Library…**.
-3. Click **Sign in to AllDebrid**, then open the displayed link and confirm the PIN in your browser.
-4. The library loads automatically. Videos are displayed directly; click **Play**.
+3. Click **Sign in to AllDebrid** and confirm the displayed PIN in your browser.
+4. Click **Play** on a ready video to open it in a new IINA window.
 
-**Refresh** loads a full status snapshot on first use, then merges incremental changes (including deletions) using AllDebrid’s session/counter protocol. A server-requested full sync replaces the snapshot. Each new sign-in starts a fresh sync session. Refresh caches file listings for unchanged ready magnets and loads new or changed listings in batches of 500. Transfer statistics do not invalidate cached files; other status changes do. Deleted or non-ready magnets lose their cached files. Full syncs preserve matching cached listings. The cache lasts only for the current sign-in session. Failed listings are retried on the next refresh. Magnets that are not ready remain visible but cannot be played. Search ignores case and accents and matches every entered word across magnet names, video paths, and extracted metadata. Video titles, year, season/episode, resolution, language, codec, and source are detected locally from filenames when recognizable; the original path stays visible. Optional movie posters are retrieved from TMDB using the extracted title and year; detected TV episodes are excluded. Videos are identified by their file extensions; archives and ISO images are not scanned. The plugin does not add or restart magnets. **Delete** removes one video from the library. Individual removals are saved locally in plugin preferences and survive refresh, sign-out, and restarts. AllDebrid does not support deleting individual files: the magnet stays on AllDebrid until its last remaining video is deleted, then the plugin deletes the entire magnet (including any non-video files). Search and filters do not affect which videos count toward this deletion. If AllDebrid deletion fails, the last video remains available for retry.
+Your AllDebrid account must allow access to magnets and link unlocking. Playback depends on file availability and IINA's supported formats.
 
-Your account must allow access to magnets and link unlocking. A direct link is generated for each playback request; delayed links are polled for up to ten minutes. Playback depends on file availability and the formats supported by IINA.
+## Usage
 
-**Theme** offers **System**, **Light**, and **Dark**. System follows the macOS appearance. Your choice is saved in the plugin preferences and preserved when signing out.
+- **Refresh** updates your library. Videos in nested folders are included; archives and ISO images are not scanned.
+- **Search** matches magnet names, video paths, and metadata, ignoring case and accents.
+- **Ready only** hides videos that cannot yet be played.
+- **Theme** offers System, Light, and Dark and remembers your choice.
+- **Delete** hides a video locally, including after refresh or restart. Deleting a magnet's last remaining video **deletes the entire magnet from AllDebrid, including non-video files**. Search and filters do not affect this count. If deletion fails, the last video remains available for retry.
 
-## Movie posters
+The plugin does not add or restart magnets.
 
-Enter your TMDB **API key (v3)** in the library and click **Save**. Get a key from your [TMDB account settings](https://www.themoviedb.org/settings/api). Saving an empty key disables posters. The key is stored in plugin preferences, not in a secure keychain, and survives sign-out and restarts.
+### Optional TMDB metadata
 
-A placeholder reserves the poster space while metadata and images load. The torrent name is shown below each video’s path and size. The first matching TMDB result with a poster is used, filtered by year when available. Filename parsing and matches may be imperfect. Results, including missing posters, are cached in memory; failed requests are retried on Refresh. TMDB errors do not block playback. Sign-out clears cached poster results.
+Enter a TMDB **API key (v3)** and click **Save** to enable titles, episode names, and posters. Get a key from your [TMDB account settings](https://www.themoviedb.org/settings/api). Save an empty key to disable it.
+
+Matches use information parsed from filenames and may be imperfect. Titles are requested in French. TMDB failures do not block playback.
 
 ## Data and privacy
 
-The API key obtained through PIN authentication is kept **in memory for the current IINA session**. Sign in again after restarting IINA. **Sign out** clears the key and the displayed library and cancels pending operations; it does not revoke the key on AllDebrid. To revoke it, visit https://alldebrid.com/apikeys/.
-
-No telemetry. When enabled, TMDB receives movie titles and years, and poster images load from its image host. File listings and AllDebrid file links are kept only in memory for the current session. AllDebrid API requests go only to AllDebrid; IINA then streams the video from the direct link's host. IINA may retain playback URLs in its normal history.
+- AllDebrid and TMDB API keys are stored in **plugin preferences, not a secure keychain**.
+- **Sign out** clears the saved AllDebrid key, displayed library, and pending operations. It keeps your TMDB key, theme, and hidden videos. To revoke the AllDebrid key, use [AllDebrid API key settings](https://alldebrid.com/apikeys/).
+- No telemetry. When enabled, TMDB receives titles, years, and season/episode numbers; posters load from its image host.
+- File listings and AllDebrid file links stay in memory for the session. IINA streams from the direct link's host and may retain playback URLs in its history.
 
 ## Development
 
-No npm dependencies or bundler required.
+TypeScript sources live in `src/`; build output goes to `dist/plugin`.
 
 ```sh
-node --test tests/*.test.js
-python3 scripts/pack.py
+npm run lint       # Check code and formatting
+npm run typecheck  # Validate TypeScript
+npm test           # Build and run unit and regression tests
+npm run pack       # Build and create the plugin archive
 ```
 
-On macOS, you can also use the official CLI:
+On macOS, link the built plugin for development and rebuild after changes:
 
 ```sh
-/Applications/IINA.app/Contents/MacOS/iina-plugin link .
-/Applications/IINA.app/Contents/MacOS/iina-plugin pack .
+/Applications/IINA.app/Contents/MacOS/iina-plugin link dist/plugin
 ```
 
-API documentation: https://docs.iina.io/ and https://docs.alldebrid.com/.
+Authentication and playback require manual testing on macOS with an AllDebrid account.
 
-Tests use a simulated IINA environment. Actual authentication and playback must be validated on macOS with an AllDebrid account; they cannot run in this Linux environment.
+API docs: [IINA](https://docs.iina.io/) · [AllDebrid](https://docs.alldebrid.com/)
