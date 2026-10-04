@@ -6,7 +6,7 @@ A library without posters: all magnets in your account, videos in nested folders
 
 Requires IINA 1.4.0 or later on macOS with plugins enabled.
 
-1. Open `dist/alldebrid.iinaplgz` with IINA and grant network access to `api.alldebrid.com`.
+1. Run `python3 scripts/pack.py` to generate `dist/alldebrid.iinaplgz` (requires Python 3). Open the package with IINA and grant network access to `api.alldebrid.com`.
 2. Open **Plugins → AllDebrid → AllDebrid Library…**.
 3. Click **Sign in to AllDebrid**, then open the displayed link and confirm the PIN in your browser.
 4. The library loads automatically. Expand a magnet and click **Play**.
