@@ -1,10 +1,16 @@
 const { http, menu, standaloneWindow: view, utils, preferences, global: players } = iina;
 const { videos, metadata } = require('./library.js');
 const API = 'https://api.alldebrid.com/';
-const FILE_BATCH_SIZE = 100;
+const FILE_BATCH_SIZE = 200;
 let statusSession = Math.floor(Math.random() * 2147483647) + 1;
 let statusCounter = 0;
 let statuses = new Map();
+let fileCache = new Map();
+// Transfer statistics do not change the file tree. Unknown fields invalidate it.
+const TRANSFER_FIELDS = new Set(['status', 'downloaded', 'uploaded', 'downloadSpeed', 'uploadSpeed', 'seeders', 'peers']);
+function fileSignature(magnet) {
+  return JSON.stringify(Object.keys(magnet).filter(key => !TRANSFER_FIELDS.has(key)).sort().map(key => [key, magnet[key]]));
+}
 function setFiles(magnet, files) {
   magnet.files = files.map((file, index) => {
     const id = magnet.id + ':' + index;
@@ -86,11 +92,20 @@ async function refresh(token) {
   const magnets = Array.from(statuses.values());
   filesById = {};
   const pending = [];
+  const retained = new Map();
   state.magnets = magnets.slice().sort((a, b) => (Number(b.uploadDate) || 0) - (Number(a.uploadDate) || 0)).map(m => {
     const magnet = { id: String(m.id), name: m.filename, status: m.status, ready: Number(m.statusCode) === 4, files: [] };
-    if (magnet.ready) pending.push(magnet);
+    if (magnet.ready) {
+      const signature = fileSignature(m);
+      const cached = fileCache.get(magnet.id);
+      if (cached && cached.signature === signature) {
+        retained.set(magnet.id, cached);
+        setFiles(magnet, cached.files);
+      } else pending.push(magnet);
+    }
     return magnet;
   });
+  fileCache = retained;
   state.libraryRevision = (state.libraryRevision || 0) + 1;
   send();
   let errors = 0;
@@ -119,6 +134,7 @@ async function refresh(token) {
         continue;
       }
       const files = videos(item.files);
+      fileCache.set(magnet.id, { signature: fileSignature(statuses.get(magnet.id)), files });
       setFiles(magnet, files);
     }
     state.libraryRevision++;
@@ -220,7 +236,7 @@ view.onMessage('open-pin', () => { if (state.pin) utils.open(state.pin.url); });
 view.onMessage('disconnect', () => {
   try { saveKey(''); } catch (error) { fail(error); return; }
   cancel(); filesById = {};
-  statuses = new Map(); statusCounter = 0;
+  statuses = new Map(); fileCache = new Map(); statusCounter = 0;
   statusSession = Math.floor(Math.random() * 2147483647) + 1;
   state = { connected: false, busy: false, magnets: [], message: 'Signed out.' }; send();
 });
