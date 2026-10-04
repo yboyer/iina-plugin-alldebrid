@@ -21,10 +21,12 @@ export interface Video {
   size: number
 }
 export interface LibraryFile extends Omit<Video, 'link'> {
+  episodeTitle?: string
   id: string
   metadata?: Metadata
   poster?: string | null
   posterPending?: boolean
+  tmdbTitle?: string
 }
 export interface Magnet {
   error?: string

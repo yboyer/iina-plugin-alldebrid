@@ -22,7 +22,7 @@ async function harness(key = 'secret', initialResponse = () => ({ magnets: [] })
       text: JSON.stringify(
         url.startsWith('https://api.themoviedb.org/') ? body : { status: 'success', data: body }
       ),
-      statusCode: 200,
+      statusCode: body?.httpStatus || 200,
     }
   }
   const context = {
@@ -576,14 +576,19 @@ const tmdbLibrary = url =>
           },
         ],
       }
-test('TMDB stores key, searches title/year, caches duplicates, and excludes episodes', async () => {
+test('TMDB stores key, searches title/year, caches duplicates, and enriches episodes', async () => {
   const storage = {}
   const h = await harness('secret', tmdbLibrary, storage)
-  h.respond(url =>
-    url.startsWith('https://api.themoviedb.org/')
-      ? { results: [{ poster_path: '/poster.jpg' }] }
-      : tmdbLibrary(url)
-  )
+  h.respond(url => {
+    if (url.includes('/search/tv'))
+      return { results: [{ id: 42, name: 'Série officielle', poster_path: '/series.jpg' }] }
+    if (url.includes('/season/')) return { name: 'Le commencement' }
+    if (url.includes('/search/movie'))
+      return {
+        results: [{ title: 'Le Fabuleux Destin d’Amélie Poulain', poster_path: '/poster.jpg' }],
+      }
+    return tmdbLibrary(url)
+  })
   h.handlers['tmdb-key'](' tmdb-secret ')
   await tick()
   assert.equal(storage['tmdb-api-key'], 'tmdb-secret')
@@ -595,7 +600,15 @@ test('TMDB stores key, searches title/year, caches duplicates, and excludes epis
   assert.equal(calls[0].options.headers, undefined)
   assert.equal(h.state().magnets[0].files[0].poster, 'https://image.tmdb.org/t/p/w185/poster.jpg')
   assert.equal(h.state().magnets[0].files[1].poster, h.state().magnets[0].files[0].poster)
-  assert.equal(h.state().magnets[0].files[2].poster, null)
+  assert.equal(h.state().magnets[0].files[0].tmdbTitle, 'Le Fabuleux Destin d’Amélie Poulain')
+  assert.equal(h.state().magnets[0].files[2].poster, 'https://image.tmdb.org/t/p/w185/series.jpg')
+  assert.equal(h.state().magnets[0].files[2].tmdbTitle, 'Série officielle')
+  assert.equal(h.state().magnets[0].files[2].episodeTitle, 'Le commencement')
+  assert.equal(h.calls.filter(call => call.url.includes('/search/tv')).length, 1)
+  assert.match(
+    h.calls.find(call => call.url.includes('/season/')).url,
+    /tv\/42\/season\/1\/episode\/1\?/
+  )
   assert.equal(JSON.stringify(h.state()).includes('tmdb-secret'), false)
   h.handlers.refresh()
   await tick()
@@ -604,6 +617,8 @@ test('TMDB stores key, searches title/year, caches duplicates, and excludes epis
   await tick()
   assert.equal(h.state().tmdbConfigured, false)
   assert.equal(h.state().magnets[0].files[0].poster, null)
+  assert.equal(h.state().magnets[0].files[0].tmdbTitle, undefined)
+  assert.equal(h.state().magnets[0].files[2].episodeTitle, undefined)
 })
 test('TMDB failures retry on refresh, missing posters are cached, and playback remains available', async () => {
   const h = await harness('secret', tmdbLibrary)
@@ -620,7 +635,7 @@ test('TMDB failures retry on refresh, missing posters are cached, and playback r
   h.handlers.play('1:0')
   await tick()
   assert.equal(h.opened.length, 1)
-  h.respond(url => (url.includes('/search/movie') ? { results: [] } : tmdbLibrary(url)))
+  h.respond(url => (url.includes('/search/') ? { results: [] } : tmdbLibrary(url)))
   h.handlers.refresh()
   await tick()
   assert.equal(h.state().tmdbMessage, '')
@@ -629,6 +644,70 @@ test('TMDB failures retry on refresh, missing posters are cached, and playback r
   h.handlers.refresh()
   await tick()
   assert.equal(h.calls.slice(count).filter(call => call.url.includes('/search/movie')).length, 0)
+})
+test('TMDB shares series results and retries episode failures without losing the series poster', async () => {
+  const seriesLibrary = url =>
+    url.endsWith('magnet/status')
+      ? { magnets: [{ id: 1, filename: 'Series', statusCode: 4 }] }
+      : {
+          magnets: [
+            {
+              id: 1,
+              files: [
+                { n: 'Show.S03E07.mkv', l: 'a' },
+                { n: 'Show.S03E08.mkv', l: 'b' },
+                { n: 'Show.S03E07.1080p.mkv', l: 'c' },
+              ],
+            },
+          ],
+        }
+  const h = await harness('secret', seriesLibrary)
+  let offline = true
+  h.respond(url => {
+    if (url.includes('/search/tv'))
+      return { results: [{ id: 42, name: 'La Série', poster_path: '/series.jpg' }] }
+    if (url.includes('/episode/7')) {
+      if (offline) throw new Error('Offline')
+      return { name: 'Le retour' }
+    }
+    if (url.includes('/episode/8')) return { httpStatus: 404 }
+    return seriesLibrary(url)
+  })
+  h.handlers['tmdb-key']('key')
+  await tick()
+  assert.match(h.state().tmdbMessage, /Unable to load TMDB/)
+  assert.equal(h.state().magnets[0].files[0].tmdbTitle, 'La Série')
+  assert.equal(h.state().magnets[0].files[0].poster, 'https://image.tmdb.org/t/p/w185/series.jpg')
+  assert.equal(h.state().magnets[0].files[1].episodeTitle, undefined)
+  offline = false
+  h.handlers.refresh()
+  await tick()
+  assert.equal(h.state().tmdbMessage, '')
+  assert.equal(h.state().magnets[0].files[0].episodeTitle, 'Le retour')
+  assert.equal(h.state().magnets[0].files[2].episodeTitle, 'Le retour')
+  assert.equal(h.calls.filter(call => call.url.includes('/search/tv')).length, 1)
+  assert.equal(h.calls.filter(call => call.url.includes('/episode/8')).length, 1)
+  const count = h.calls.length
+  h.handlers.refresh()
+  await tick()
+  assert.equal(h.calls.slice(count).filter(call => call.url.includes('themoviedb')).length, 0)
+})
+test('TMDB uses the first movie title even without a poster', async () => {
+  const h = await harness('secret', tmdbLibrary)
+  h.respond(url =>
+    url.includes('/search/')
+      ? {
+          results: [
+            { title: 'Titre officiel', poster_path: null },
+            { title: 'Autre film', poster_path: '/wrong.jpg' },
+          ],
+        }
+      : tmdbLibrary(url)
+  )
+  h.handlers['tmdb-key']('key')
+  await tick()
+  assert.equal(h.state().magnets[0].files[0].tmdbTitle, 'Titre officiel')
+  assert.equal(h.state().magnets[0].files[0].poster, null)
 })
 test('pending TMDB responses are ignored after sign-out and key replacement', async () => {
   for (const action of ['disconnect', 'replace']) {

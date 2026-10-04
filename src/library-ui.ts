@@ -103,7 +103,13 @@ function render() {
     const matches = words.every(word => normalize(magnet.name).includes(word))
     const files = magnet.files.filter(file => {
       const searchable = normalize(
-        [magnet.name, file.path, ...Object.values(file.metadata || {})].join(' ')
+        [
+          magnet.name,
+          file.path,
+          file.tmdbTitle,
+          file.episodeTitle,
+          ...Object.values(file.metadata || {}),
+        ].join(' ')
       )
       return words.every(word => searchable.includes(word))
     })
@@ -150,7 +156,12 @@ function render() {
         meta.codec,
         meta.source,
       ].filter(Boolean)
-      const info = text('div', meta.title || file.name, 'file-info')
+      const title = file.tmdbTitle || meta.title || file.name
+      const info = text(
+        'div',
+        file.episodeTitle ? `${title} — ${file.episodeTitle}` : title,
+        'file-info'
+      )
       if (labels.length) info.append(text('small', labels.join(' · ')))
       info.append(text('small', `${file.path} · ${size(file.size)}`))
       const button: MediaButton = text('button', 'Play')

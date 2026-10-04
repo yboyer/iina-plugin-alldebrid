@@ -1,4 +1,13 @@
-import type { ApiData, FileResponse, LibraryState, Magnet, Metadata, Status, Video } from './types'
+import type {
+  ApiData,
+  FileResponse,
+  LibraryFile,
+  LibraryState,
+  Magnet,
+  Metadata,
+  Status,
+  Video,
+} from './types'
 import { metadata, videos } from './library'
 
 const { http, menu, standaloneWindow: view, utils, preferences, global: players } = iina
@@ -65,7 +74,13 @@ let apiKey = ''
 let state: LibraryState = { connected: !!apiKey, busy: false, magnets: [], message: '' }
 let tmdbKey = ''
 let posterGeneration = 0
-let posterCache = new Map<string, string | null>()
+interface TmdbMatch {
+  id?: number
+  poster: string | null
+  title?: string
+}
+let posterCache = new Map<string, TmdbMatch>()
+let episodeCache = new Map<string, string | null>()
 try {
   tmdbKey = String(preferences.get('tmdb-api-key') || '')
 } catch (_) {}
@@ -147,60 +162,91 @@ async function request<T = ApiData>(
   return body.data
 }
 function posterIdentity(meta: Metadata) {
-  return JSON.stringify([meta.title, meta.year || null])
+  return JSON.stringify([meta.season === undefined ? 'movie' : 'tv', meta.title, meta.year || null])
+}
+function episodeIdentity(file: LibraryFile) {
+  return JSON.stringify([
+    posterIdentity(file.metadata!),
+    file.metadata!.season,
+    file.metadata!.episode,
+  ])
+}
+function applyTmdb(file: LibraryFile) {
+  const match = tmdbKey ? posterCache.get(posterIdentity(file.metadata!)) : undefined
+  file.poster = match?.poster || null
+  file.tmdbTitle = match?.title
+  file.episodeTitle = tmdbKey ? episodeCache.get(episodeIdentity(file)) || undefined : undefined
 }
 async function loadPosters(token: number, revision: number) {
   const key = tmdbKey
   if (!key) return
   const current = () => valid(token) && revision === posterGeneration
-  const files = state.magnets
-    .flatMap(magnet => magnet.files)
-    .filter(file => file.metadata?.title && file.metadata?.season === undefined)
+  const files = state.magnets.flatMap(magnet => magnet.files).filter(file => file.metadata?.title)
+  const auth = `api_key=${encodeURIComponent(key)}&language=fr-FR`
+  async function get(path: string, missingAllowed = false) {
+    await new Promise(resolve => setTimeout(resolve, 150))
+    if (!current()) return undefined
+    const response = await http.get(`https://api.themoviedb.org/3/${path}`, {})
+    if (!current()) return undefined
+    if (missingAllowed && response.statusCode === 404) return null
+    if (response.statusCode !== 200) throw new Error('TMDB request failed')
+    return JSON.parse(response.text)
+  }
   let failed = false
   for (const file of files) {
     if (!current()) return
-    const identity = posterIdentity(file.metadata!)
-    if (!posterCache.has(identity)) {
-      let url =
-        'https://api.themoviedb.org/3/search/movie?api_key=' +
-        encodeURIComponent(key) +
-        '&language=fr-FR&include_adult=false&query=' +
-        encodeURIComponent(file.metadata!.title)
-      if (file.metadata!.year) url += `&primary_release_year=${file.metadata!.year}`
-      try {
-        await new Promise(resolve => setTimeout(resolve, 150))
+    const meta = file.metadata!
+    const identity = posterIdentity(meta)
+    const tv = meta.season !== undefined
+    try {
+      if (!posterCache.has(identity)) {
+        let path = `search/${tv ? 'tv' : 'movie'}?${auth}&include_adult=false&query=${encodeURIComponent(meta.title)}`
+        if (meta.year)
+          path += `&${tv ? 'first_air_date_year' : 'primary_release_year'}=${meta.year}`
+        const body = await get(path)
         if (!current()) return
-        const response = await http.get(url, {})
-        if (!current()) return
-        if (response.statusCode !== 200) throw new Error('TMDB request failed')
-        const body: { results: { poster_path?: string }[] } = JSON.parse(response.text)
-        if (!Array.isArray(body.results)) throw new Error('Invalid TMDB response')
-        const movie = body.results.find(
-          candidate =>
-            typeof candidate.poster_path === 'string' &&
-            /^\/[a-zA-Z0-9_-]+\.(jpg|png)$/.test(candidate.poster_path)
-        )
-        posterCache.set(
-          identity,
-          movie ? `https://image.tmdb.org/t/p/w185${movie.poster_path}` : null
-        )
-      } catch (_) {
-        if (!current()) return
-        failed = true
-        // Keep failures out of the cache so Refresh can retry them.
-        break
+        if (!Array.isArray(body?.results)) throw new Error('Invalid TMDB response')
+        const match = body.results[0]
+        const title = tv ? match?.name : match?.title
+        const poster = match?.poster_path
+        posterCache.set(identity, {
+          id: Number.isInteger(match?.id) && match.id > 0 ? match.id : undefined,
+          title: typeof title === 'string' && title.trim() ? title.trim() : undefined,
+          poster:
+            typeof poster === 'string' && /^\/[a-zA-Z0-9_-]+\.(jpg|png)$/.test(poster)
+              ? `https://image.tmdb.org/t/p/w185${poster}`
+              : null,
+        })
       }
+      applyTmdb(file)
+      const match = posterCache.get(identity)!
+      const episode = episodeIdentity(file)
+      if (tv && match.id && meta.episode !== undefined && !episodeCache.has(episode)) {
+        const body = await get(
+          `tv/${match.id}/season/${meta.season}/episode/${meta.episode}?${auth}`,
+          true
+        )
+        if (!current()) return
+        if (body !== null && (!body || typeof body !== 'object' || Array.isArray(body)))
+          throw new Error('Invalid TMDB response')
+        episodeCache.set(
+          episode,
+          typeof body?.name === 'string' && body.name.trim() ? body.name.trim() : null
+        )
+        applyTmdb(file)
+      }
+    } catch (_) {
+      if (!current()) return
+      failed = true
+      // Keep failures out of the cache so Refresh can retry them.
     }
-    file.poster = posterCache.get(identity) ?? null
     file.posterPending = false
     state.libraryRevision = (state.libraryRevision || 0) + 1
     send()
   }
   if (!current()) return
-  state.libraryRevision = (state.libraryRevision || 0) + 1
-  for (const file of files) file.posterPending = false
   state.tmdbMessage = failed
-    ? 'Unable to load TMDB posters. Check your API key and refresh to retry.'
+    ? 'Unable to load TMDB metadata. Check your API key and refresh to retry.'
     : ''
   send()
 }
@@ -208,13 +254,16 @@ function updatePosters() {
   const revision = ++posterGeneration
   for (const magnet of state.magnets)
     for (const file of magnet.files) {
-      const identity = posterIdentity(file.metadata!)
-      file.poster = (tmdbKey && posterCache.get(identity)) || null
+      applyTmdb(file)
+      const match = posterCache.get(posterIdentity(file.metadata!))
       file.posterPending =
         !!tmdbKey &&
-        file.metadata?.season === undefined &&
         !!file.metadata?.title &&
-        !posterCache.has(identity)
+        (!match ||
+          (file.metadata.season !== undefined &&
+            !!match.id &&
+            file.metadata.episode !== undefined &&
+            !episodeCache.has(episodeIdentity(file))))
     }
   state.libraryRevision = (state.libraryRevision || 0) + 1
   send()
@@ -497,6 +546,7 @@ view.onMessage('tmdb-key', value => {
   }
   tmdbKey = key
   posterCache = new Map()
+  episodeCache = new Map()
   state.tmdbMessage = key ? 'TMDB enabled.' : 'TMDB disabled.'
   updatePosters()
 })
@@ -530,6 +580,7 @@ view.onMessage('disconnect', () => {
   statuses = new Map()
   fileCache = new Map()
   posterCache = new Map()
+  episodeCache = new Map()
   statusCounter = 0
   statusSession = Math.floor(Math.random() * 2147483647) + 1
   state = { connected: false, busy: false, magnets: [], message: 'Signed out.' }

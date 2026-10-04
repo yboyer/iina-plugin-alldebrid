@@ -276,3 +276,30 @@ test('deleting the only search result updates the empty state without losing oth
   assert.equal(h.nodes.get('magnets').children[0].textContent, 'No results.')
   assert.equal(h.nodes.get('count').textContent, '0 / 1 magnets · 1 video(s)')
 })
+
+test('TMDB titles and episode names render and are searchable', () => {
+  const h = harness()
+  const state = {
+    ...library,
+    magnets: [
+      {
+        ...library.magnets[0],
+        files: [
+          {
+            ...library.magnets[0].files[0],
+            metadata: { title: 'show', season: 3, episode: 7 },
+            tmdbTitle: 'La Série',
+            episodeTitle: 'Le retour',
+          },
+        ],
+      },
+    ],
+  }
+  h.receive(state)
+  const info = h.nodes.get('magnets').children[0].children[0]
+  assert.equal(info.textContent, 'La Série — Le retour')
+  assert.equal(info.children[0].textContent, 'S03E07')
+  h.nodes.get('search').value = 'série retour'
+  h.nodes.get('search').listeners.input()
+  assert.equal(h.nodes.get('magnets').children.length, 1)
+})
