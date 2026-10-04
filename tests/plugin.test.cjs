@@ -171,8 +171,9 @@ test('loads all magnets, requests ready files and unlocks before playback', asyn
   assert.equal(h.opened[0].url, 'https://cdn.example/film.mp4')
   assert.equal(h.calls[2].options.data.link, 'https://alldebrid.com/f/a')
 })
-test('PIN authentication keeps the session key and refreshes the account', async () => {
-  const h = await harness('')
+test('PIN authentication saves the key and refreshes the account', async () => {
+  const storage = {}
+  const h = await harness('', undefined, storage)
   h.respond(url => {
     if (url.endsWith('pin/get'))
       return {
@@ -192,6 +193,7 @@ test('PIN authentication keeps the session key and refreshes the account', async
   assert.equal(h.calls.at(-1).options.headers.Authorization, 'Bearer new-secret')
   assert.equal(h.state().connected, true)
   assert.equal(h.state().pin, undefined)
+  assert.equal(storage['alldebrid-api-key'], 'new-secret')
 })
 test('disconnect prevents an in-flight response from restoring private library', async () => {
   const h = await harness()
@@ -251,11 +253,30 @@ test('delayed links wait for readiness before opening', async () => {
   assert.equal(h.opened[0].url, 'https://cdn.example/ready.mp4')
 })
 
-test('starts without Keychain APIs and requires sign-in for each session', async () => {
+test('starts signed out when no AllDebrid key is saved', async () => {
   const h = await harness('')
   h.handlers.ready()
   assert.equal(h.state().connected, false)
   assert.equal(h.calls.length, 0)
+})
+
+test('restores the saved AllDebrid key after restart and clears it on sign-out', async () => {
+  const storage = {}
+  await harness('saved-secret', undefined, storage)
+  const h = await harness('', undefined, storage)
+  h.handlers.ready()
+  await tick()
+  assert.equal(h.state().connected, true)
+  assert.equal(h.calls.length, 1)
+  assert.ok(h.calls[0].url.endsWith('magnet/status'))
+  assert.equal(h.calls[0].options.headers.Authorization, 'Bearer saved-secret')
+  h.handlers.disconnect()
+  assert.equal(storage['alldebrid-api-key'], '')
+  assert.equal(h.state().connected, false)
+  const restarted = await harness('', undefined, storage)
+  restarted.handlers.ready()
+  assert.equal(restarted.state().connected, false)
+  assert.equal(restarted.calls.length, 0)
 })
 
 test('a refused player creation reports failure and releases the controls', async () => {

@@ -69,8 +69,10 @@ let busy = false
 const deletions = new Map<string, string>()
 let pinTimer: ReturnType<typeof setTimeout> | null = null
 let filesById: Record<string, Video> = {}
-// Authentication lasts only for this IINA session.
 let apiKey = ''
+try {
+  apiKey = String(preferences.get('alldebrid-api-key') || '')
+} catch (_) {}
 let state: LibraryState = { connected: !!apiKey, busy: false, magnets: [], message: '' }
 let tmdbKey = ''
 let posterGeneration = 0
@@ -103,6 +105,12 @@ function valid(token: number) {
   return token === generation
 }
 function saveKey(key: string) {
+  try {
+    preferences.set('alldebrid-api-key', key)
+    preferences.sync()
+  } catch (_) {
+    throw new Error('Unable to save the AllDebrid API key.')
+  }
   apiKey = key
   state.connected = !!key
 }
