@@ -78,10 +78,15 @@ a:focus-visible {
   border-radius: 10px;
 }
 #tools {
+  position: sticky;
+  top: 0;
+  z-index: 1;
   display: flex;
   gap: 16px;
   align-items: center;
+  padding: 12px 0;
   margin-top: 22px;
+  background: var(--background);
 }
 #search {
   flex: 1;
