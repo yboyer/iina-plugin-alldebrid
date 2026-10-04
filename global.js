@@ -5,6 +5,9 @@ const CACHE_KEY = 'library-cache-v1';
 const CACHE_TTL = 24 * 60 * 60 * 1000;
 const FILE_BATCH_SIZE = 100;
 let account = '';
+let statusSession = Math.floor(Math.random() * 2147483647) + 1;
+let statusCounter = 0;
+let statuses = new Map();
 let cache = { version: 1, account: '', entries: {} };
 let cacheWarning = '';
 function loadCache() {
@@ -97,9 +100,20 @@ async function refresh(token) {
     loadCache();
   }
   state.message = 'Loading magnets…'; send();
-  const data = await request('v4.1/magnet/status', {}, key);
+  const data = await request('v4.1/magnet/status', { session: statusSession, counter: statusCounter }, key);
   if (!valid(token)) return;
-  const magnets = Array.isArray(data.magnets) ? data.magnets : data.magnets ? [data.magnets] : [];
+  const updates = Array.isArray(data.magnets) ? data.magnets : data.magnets ? [data.magnets] : [];
+  // Responses without a counter are ordinary full snapshots.
+  const incremental = Number.isInteger(data.counter) && data.counter >= 0;
+  const next = data.fullsync || !incremental || statusCounter === 0 ? new Map() : new Map(statuses);
+  for (const update of updates) {
+    const id = String(update.id);
+    if (update.deleted) next.delete(id);
+    else next.set(id, Object.assign({}, next.get(id), update));
+  }
+  statuses = next;
+  statusCounter = incremental ? data.counter : 0;
+  const magnets = Array.from(statuses.values());
   filesById = {};
   const pending = [], entries = {};
   state.magnets = magnets.slice().sort((a, b) => (Number(b.uploadDate) || 0) - (Number(a.uploadDate) || 0)).map(m => {
@@ -246,6 +260,8 @@ view.onMessage('open-pin', () => { if (state.pin) utils.open(state.pin.url); });
 view.onMessage('disconnect', () => {
   try { saveKey(''); } catch (error) { fail(error); return; }
   cancel(); filesById = {}; account = '';
+  statuses = new Map(); statusCounter = 0;
+  statusSession = Math.floor(Math.random() * 2147483647) + 1;
   cache = { version: 1, account: '', entries: {} };
   persistCache();
   state = { connected: false, busy: false, magnets: [], message: 'Signed out.' }; send();

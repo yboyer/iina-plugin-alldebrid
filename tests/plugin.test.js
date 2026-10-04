@@ -325,3 +325,23 @@ test('clear cache works before sign-in and ignores requests while busy', async (
   assert.equal(connected.state().busy, true);
   finish({ magnets: [] }); await tick();
 });
+
+test('incremental status merges partial changes, preserves files, deletes and replaces on fullsync', async () => {
+  const h = await harness('secret', {}, 'test-user', (url, options) => url.endsWith('magnet/status')
+    ? { fullsync: true, counter: 1, magnets: [{ id: 1, filename: 'Film', statusCode: 4 }, { id: 2, filename: 'Pending', statusCode: 1 }] }
+    : libraryResponse([])(url, options));
+  const session = h.bootCalls.find(call => call.url.endsWith('magnet/status')).options.data.session;
+  h.respond(() => ({ counter: 2, magnets: [{ id: 2, downloaded: 42 }] }));
+  h.handlers.refresh(); await tick();
+  assert.equal(h.calls.length, 1);
+  assert.equal(h.calls[0].options.data.session, session);
+  assert.equal(h.calls[0].options.data.counter, 1);
+  assert.equal(h.state().magnets[0].files.length, 1);
+  assert.equal(h.state().magnets[1].name, 'Pending');
+  h.respond(() => ({ counter: 3, magnets: [{ id: 2, deleted: true }] }));
+  h.handlers.refresh(); await tick();
+  assert.equal(h.state().magnets.length, 1);
+  h.respond(() => ({ fullsync: true, counter: 1, magnets: [] }));
+  h.handlers.refresh(); await tick();
+  assert.deepEqual(h.state().magnets, []);
+});
