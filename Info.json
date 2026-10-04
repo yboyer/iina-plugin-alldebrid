@@ -12,6 +12,7 @@
     "network-request"
   ],
   "allowedDomains": [
-    "api.alldebrid.com"
+    "api.alldebrid.com",
+    "*.debrid.it"
   ]
 }

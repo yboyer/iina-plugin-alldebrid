@@ -6,7 +6,7 @@ A library without posters: all magnets in your account, videos in nested folders
 
 Requires IINA 1.4.0 or later on macOS with plugins enabled.
 
-1. Run `python3 scripts/pack.py` to generate `dist/alldebrid.iinaplgz` (requires Python 3). Open the package with IINA and grant network access to `api.alldebrid.com`.
+1. Run `python3 scripts/pack.py` to generate `dist/alldebrid.iinaplgz` (requires Python 3). Open the package with IINA and grant network access to `api.alldebrid.com` and `*.debrid.it` (video streaming servers).
 2. Open **Plugins → AllDebrid → AllDebrid Library…**.
 3. Click **Sign in to AllDebrid**, then open the displayed link and confirm the PIN in your browser.
 4. The library loads automatically. Expand a magnet and click **Play**.
@@ -17,7 +17,7 @@ Your account must allow access to magnets and link unlocking. A direct link is g
 
 ## Data and privacy
 
-The API key obtained through PIN authentication is stored in the **macOS Keychain**. **Sign out** replaces the stored key with an empty value and cancels pending operations; it does not revoke the key on AllDebrid. To revoke it, visit https://alldebrid.com/apikeys/.
+The API key obtained through PIN authentication is kept **in memory for the current IINA session**. Sign in again after restarting IINA. **Sign out** clears the key and cancels pending operations; it does not revoke the key on AllDebrid. To revoke it, visit https://alldebrid.com/apikeys/.
 
 No third-party services or telemetry. The library stays in memory. API requests go only to AllDebrid; IINA then streams the video from the direct link's host. IINA may retain playback URLs in its normal history.
 

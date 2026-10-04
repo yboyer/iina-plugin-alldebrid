@@ -5,12 +5,12 @@ let generation = 0;
 let busy = false;
 let pinTimer = null;
 let filesById = {};
-let apiKey = utils.keyChainRead('alldebrid', 'apiKey') || '';
+// Authentication lasts only for this IINA session.
+let apiKey = '';
 let state = { connected: !!apiKey, busy: false, magnets: [], message: '' };
 function send() { view.postMessage('state', state); }
 function valid(token) { return token === generation; }
 function saveKey(key) {
-  if (!utils.keyChainWrite('alldebrid', 'apiKey', key)) throw new Error('Unable to update the API key in the macOS Keychain.');
   apiKey = key;
   state.connected = !!key;
 }
@@ -92,7 +92,8 @@ async function play(id, token) {
     }
   }
   if (!/^https?:\/\//i.test(data.link || '')) throw new Error('Playback link unavailable. Try again later.');
-  players.createPlayerInstance({ url: data.link, enablePlugins: true });
+  const player = players.createPlayerInstance({ url: data.link, enablePlugins: true });
+  if (player === false) throw new Error('IINA could not open the playback link. Check the plugin network permissions.');
   state.message = 'Playing ' + file.name;
 }
 async function task(action) {
