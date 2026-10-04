@@ -1,6 +1,7 @@
 const el = id => document.getElementById(id);
 let state = { connected: false, busy: false, magnets: [] };
 const expanded = new Set();
+let renderedKey = null;
 function text(tag, value, className) {
   const node = document.createElement(tag);
   node.textContent = value;
@@ -22,6 +23,9 @@ function render() {
   el('pin').hidden = !state.pin;
   if (state.pin) { el('code').textContent = state.pin.code; el('pin-link').href = state.pin.url; }
   const query = el('search').value.toLocaleLowerCase();
+  const renderKey = JSON.stringify([state.connected, state.libraryRevision, state.busy, query, el('ready-only').checked]);
+  if (renderKey === renderedKey) return;
+  renderedKey = renderKey;
   const container = el('magnets');
   container.replaceChildren();
   let total = 0, shown = 0;
