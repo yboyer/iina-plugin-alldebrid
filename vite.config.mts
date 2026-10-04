@@ -3,7 +3,7 @@ import { defineConfig } from 'vite'
 export default defineConfig(({ mode }) => ({
   build: {
     outDir: 'dist/plugin',
-    emptyOutDir: mode !== 'ui',
+    emptyOutDir: mode === 'production',
     target: 'safari14',
     minify: false,
     rolldownOptions: { output: { chunkFileNames: '[name]-[hash].js' } },
@@ -16,9 +16,10 @@ export default defineConfig(({ mode }) => ({
             fileName: () => 'library-ui.js',
           }
         : {
-            entry: { main: 'src/main.ts', global: 'src/global.ts', library: 'src/library.ts' },
+            // Build each entry separately so IINA never loads shared CommonJS chunks.
+            entry: mode === 'production' ? 'src/global.ts' : `src/${mode}.ts`,
             formats: ['cjs'],
-            fileName: (_format, name) => `${name}.js`,
+            fileName: () => `${mode === 'production' ? 'global' : mode}.js`,
           },
   },
 }))

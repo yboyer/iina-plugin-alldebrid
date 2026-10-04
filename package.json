@@ -5,7 +5,7 @@
   "scripts": {
     "typecheck": "tsc --noEmit && tsc --noEmit -p tests",
     "lint": "biome check .",
-    "build": "npm run typecheck && vite build && vite build --mode ui && node scripts/assets.mjs",
+    "build": "npm run typecheck && vite build && vite build --mode main && vite build --mode library && vite build --mode ui && node scripts/assets.mjs",
     "test": "npm run build && node --test tests/*.test.mts tests/*.test.cjs",
     "pack": "npm run build && python3 scripts/pack.py"
   },

@@ -26,7 +26,9 @@ async function harness(key = 'secret', initialResponse = () => ({ magnets: [] })
     }
   }
   const context = {
-    require: name => require(`../dist/plugin/${name}`),
+    require: name => {
+      throw new Error(`IINA entry must be self-contained: ${name}`)
+    },
     setTimeout: (callback, delay) => {
       if (delay === 0) {
         const run = () => {
