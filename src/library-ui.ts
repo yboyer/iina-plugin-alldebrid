@@ -146,7 +146,9 @@ function render() {
       const meta: Partial<Metadata> = file.metadata || {}
       const episode =
         meta.season !== undefined
-          ? `S${String(meta.season).padStart(2, '0')}E${String(meta.episode).padStart(2, '0')}`
+          ? `S${String(meta.season).padStart(2, '0')}${
+              meta.episode !== undefined ? `E${String(meta.episode).padStart(2, '0')}` : ''
+            }`
           : ''
       const labels = [
         episode,

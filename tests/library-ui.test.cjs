@@ -303,3 +303,23 @@ test('TMDB titles and episode names render and are searchable', () => {
   h.nodes.get('search').listeners.input()
   assert.equal(h.nodes.get('magnets').children.length, 1)
 })
+
+test('season-only metadata renders without an undefined episode number', () => {
+  const h = harness()
+  h.receive({
+    ...library,
+    magnets: [
+      {
+        ...library.magnets[0],
+        files: [
+          {
+            ...library.magnets[0].files[0],
+            metadata: { title: 'Show', season: 2 },
+          },
+        ],
+      },
+    ],
+  })
+  const info = h.nodes.get('magnets').children[0].children[0]
+  assert.equal(info.children[0].textContent, 'S02')
+})
