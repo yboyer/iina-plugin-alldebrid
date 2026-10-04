@@ -143,50 +143,43 @@ function libraryResponse(magnets) {
     return { link: 'https://cdn.example/film.mp4' };
   };
 }
-test('817 ready magnets use nine file requests with indexed form fields', async () => {
+test('817 ready magnets use two file requests with indexed form fields', async () => {
   const h = await harness();
   h.respond(libraryResponse(Array.from({ length: 817 }, (_, index) => ({ id: index + 1, statusCode: 4 }))));
   h.handlers.refresh(); await tick();
   const requests = h.calls.filter(call => call.url.endsWith('magnet/files'));
-  assert.equal(requests.length, 9);
-  assert.equal(Object.keys(requests[0].options.data).length, 100);
-  assert.equal(requests[0].options.data['id[99]'], '100');
-  assert.equal(Object.keys(requests[8].options.data).length, 17);
+  assert.equal(requests.length, 2);
+  assert.equal(Object.keys(requests[0].options.data).length, 500);
+  assert.equal(requests[0].options.data['id[499]'], '500');
+  assert.equal(Object.keys(requests[1].options.data).length, 317);
   assert.equal(h.state().magnets.filter(magnet => magnet.files.length === 1).length, 817);
 });
-test('each refresh reloads unchanged magnets and replaces their playback links', async () => {
+test('unchanged magnets retain files and playback source links', async () => {
   const h = await harness();
   h.respond(libraryResponse([{ id: 1, statusCode: 4 }]));
   h.handlers.refresh(); await tick();
   h.calls.length = 0;
-  h.respond(url => {
-    if (url.endsWith('magnet/status')) return { magnets: [{ id: 1, statusCode: 4 }] };
-    if (url.endsWith('magnet/files')) return { magnets: [{ id: 1, files: [{ n: 'updated.mp4', l: 'new-link' }] }] };
-    return { link: 'https://cdn.example/updated.mp4' };
-  });
   h.handlers.refresh(); await tick();
-  assert.equal(h.calls.length, 2);
-  assert.equal(h.state().magnets[0].files[0].name, 'updated.mp4');
+  assert.equal(h.calls.length, 1);
+  assert.equal(h.state().magnets[0].files[0].name, 'film.mp4');
   h.handlers.play('1:0'); await tick();
-  assert.equal(h.calls.at(-1).options.data.link, 'new-link');
-  assert.equal(h.opened[0].url, 'https://cdn.example/updated.mp4');
+  assert.equal(h.calls.at(-1).options.data.link, 'https://alldebrid.com/f/1');
 });
-test('each refresh reloads all batches after a partial failure', async () => {
+test('refresh retries only failed batches', async () => {
   const h = await harness();
-  const magnets = Array.from({ length: 101 }, (_, index) => ({ id: index + 1, statusCode: 4 }));
+  const magnets = Array.from({ length: 501 }, (_, index) => ({ id: index + 1, statusCode: 4 }));
   const respond = libraryResponse(magnets);
   h.respond((url, options) => {
     if (url.endsWith('magnet/files') && options.data['id[0]'] === '1') throw new Error('Network failure');
     return respond(url, options);
   });
   h.handlers.refresh(); await tick();
-  assert.match(h.state().message, /100 magnet/);
+  assert.match(h.state().message, /500 magnet/);
   h.calls.length = 0;
   h.respond(respond);
   h.handlers.refresh(); await tick();
-  assert.equal(h.calls.length, 3);
-  assert.equal(Object.keys(h.calls[1].options.data).length, 100);
-  assert.equal(Object.keys(h.calls[2].options.data).length, 1);
+  assert.equal(h.calls.length, 2);
+  assert.equal(Object.keys(h.calls[1].options.data).length, 500);
   assert.equal(h.state().magnets.every(magnet => magnet.files.length === 1 && !magnet.error), true);
 });
 test('sign-out ignores pending file responses', async () => {
@@ -278,4 +271,70 @@ test('theme preference persists across restart and sign-out, and rejects invalid
   assert.equal(reopened.state().theme, 'light');
   reopened.handlers.theme('system');
   assert.equal(storage['library-theme'], 'system');
+});
+
+test('incremental status merges partial changes, preserves files, deletes and replaces on fullsync', async () => {
+  const h = await harness('secret', (url, options) => url.endsWith('magnet/status')
+    ? { fullsync: true, counter: 1, magnets: [{ id: 1, filename: 'Film', statusCode: 4 }, { id: 2, filename: 'Pending', statusCode: 1 }] }
+    : libraryResponse([])(url, options));
+  const session = h.bootCalls.find(call => call.url.endsWith('magnet/status')).options.data.session;
+  h.respond((url, options) => url.endsWith('magnet/status')
+    ? { counter: 2, magnets: [{ id: 2, downloaded: 42 }] }
+    : libraryResponse([])(url, options));
+  h.handlers.refresh(); await tick();
+  assert.equal(h.calls.length, 1);
+  assert.equal(h.calls[0].options.data.session, session);
+  assert.equal(h.calls[0].options.data.counter, 1);
+  assert.equal(h.state().magnets[0].files.length, 1);
+  assert.equal(h.state().magnets[1].name, 'Pending');
+  h.respond((url, options) => url.endsWith('magnet/status')
+    ? { counter: 3, magnets: [{ id: 2, deleted: true }] }
+    : libraryResponse([])(url, options));
+  h.handlers.refresh(); await tick();
+  assert.equal(h.state().magnets.length, 1);
+  h.respond(() => ({ fullsync: true, counter: 1, magnets: [] }));
+  h.handlers.refresh(); await tick();
+  assert.deepEqual(h.state().magnets, []);
+});
+
+test('filename metadata identifies movies and episodes while preserving unknown titles', () => {
+  const { metadata } = require('../library');
+  assert.deepEqual(metadata('Amélie.2001.1080p.MULTI.x265.BluRay.mkv'), {
+    year: 2001, resolution: '1080P', language: 'MULTI', codec: 'X265', source: 'BLURAY', title: 'Amélie'
+  });
+  assert.deepEqual(metadata('Série.S02E03.720p.VOSTFR.WEB-DL.mp4'), {
+    season: 2, episode: 3, resolution: '720P', language: 'VOSTFR', source: 'WEB-DL', title: 'Série'
+  });
+  assert.equal(metadata('Show.2x12.mkv').episode, 12);
+  assert.equal(metadata('Un titre inconnu.mkv').title, 'Un titre inconnu');
+});
+
+test('cache follows file changes, readiness, deletion and full snapshots', async () => {
+  const h = await harness();
+  let magnets = [{ id: 1, filename: 'Film', statusCode: 4, size: 10 }];
+  h.respond((url, options) => libraryResponse(magnets)(url, options));
+  const refresh = async expected => {
+    h.calls.length = 0;
+    h.handlers.refresh(); await tick();
+    assert.equal(h.calls.filter(call => call.url.endsWith('magnet/files')).length, expected);
+  };
+  await refresh(1);
+  magnets = [{ ...magnets[0], downloaded: 10, downloadSpeed: 0 }];
+  await refresh(0);
+  magnets = [{ ...magnets[0], size: 20 }];
+  await refresh(1);
+  magnets = [{ ...magnets[0], statusCode: 1 }];
+  await refresh(0);
+  assert.equal(h.state().magnets[0].files.length, 0);
+  h.handlers.play('1:0'); await tick();
+  assert.match(h.state().message, /File not found/);
+  magnets = [{ ...magnets[0], statusCode: 4 }];
+  await refresh(1);
+  await refresh(0);
+  magnets = [];
+  await refresh(0);
+  magnets = [{ id: 1, statusCode: 4 }];
+  await refresh(1);
+  h.handlers.disconnect();
+  assert.equal(h.state().magnets.length, 0);
 });

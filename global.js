@@ -1,12 +1,21 @@
 const { http, menu, standaloneWindow: view, utils, preferences, global: players } = iina;
-const { videos } = require('./library.js');
+const { videos, metadata } = require('./library.js');
 const API = 'https://api.alldebrid.com/';
-const FILE_BATCH_SIZE = 100;
+const FILE_BATCH_SIZE = 500;
+let statusSession = Math.floor(Math.random() * 2147483647) + 1;
+let statusCounter = 0;
+let statuses = new Map();
+let fileCache = new Map();
+// Transfer statistics do not change the file tree. Unknown fields invalidate it.
+const TRANSFER_FIELDS = new Set(['status', 'downloaded', 'uploaded', 'downloadSpeed', 'uploadSpeed', 'seeders', 'peers']);
+function fileSignature(magnet) {
+  return JSON.stringify(Object.keys(magnet).filter(key => !TRANSFER_FIELDS.has(key)).sort().map(key => [key, magnet[key]]));
+}
 function setFiles(magnet, files) {
   magnet.files = files.map((file, index) => {
     const id = magnet.id + ':' + index;
     filesById[id] = file;
-    return { id, name: file.name, path: file.path, size: file.size };
+    return { id, name: file.name, path: file.path, size: file.size, metadata: metadata(file.name) };
   });
 }
 let generation = 0;
@@ -67,16 +76,36 @@ async function refresh(token) {
   const key = apiKey;
   if (!key) throw new Error('Connect your AllDebrid account.');
   state.message = 'Loading magnets…'; send();
-  const data = await request('v4.1/magnet/status', {}, key);
+  const data = await request('v4.1/magnet/status', { session: statusSession, counter: statusCounter }, key);
   if (!valid(token)) return;
-  const magnets = Array.isArray(data.magnets) ? data.magnets : data.magnets ? [data.magnets] : [];
+  const updates = Array.isArray(data.magnets) ? data.magnets : data.magnets ? [data.magnets] : [];
+  // Responses without a counter are ordinary full snapshots.
+  const incremental = Number.isInteger(data.counter) && data.counter >= 0;
+  const next = data.fullsync || !incremental || statusCounter === 0 ? new Map() : new Map(statuses);
+  for (const update of updates) {
+    const id = String(update.id);
+    if (update.deleted) next.delete(id);
+    else next.set(id, Object.assign({}, next.get(id), update));
+  }
+  statuses = next;
+  statusCounter = incremental ? data.counter : 0;
+  const magnets = Array.from(statuses.values());
   filesById = {};
   const pending = [];
+  const retained = new Map();
   state.magnets = magnets.slice().sort((a, b) => (Number(b.uploadDate) || 0) - (Number(a.uploadDate) || 0)).map(m => {
     const magnet = { id: String(m.id), name: m.filename, status: m.status, ready: Number(m.statusCode) === 4, files: [] };
-    if (magnet.ready) pending.push(magnet);
+    if (magnet.ready) {
+      const signature = fileSignature(m);
+      const cached = fileCache.get(magnet.id);
+      if (cached && cached.signature === signature) {
+        retained.set(magnet.id, cached);
+        setFiles(magnet, cached.files);
+      } else pending.push(magnet);
+    }
     return magnet;
   });
+  fileCache = retained;
   state.libraryRevision = (state.libraryRevision || 0) + 1;
   send();
   let errors = 0;
@@ -105,6 +134,7 @@ async function refresh(token) {
         continue;
       }
       const files = videos(item.files);
+      fileCache.set(magnet.id, { signature: fileSignature(statuses.get(magnet.id)), files });
       setFiles(magnet, files);
     }
     state.libraryRevision++;
@@ -206,6 +236,8 @@ view.onMessage('open-pin', () => { if (state.pin) utils.open(state.pin.url); });
 view.onMessage('disconnect', () => {
   try { saveKey(''); } catch (error) { fail(error); return; }
   cancel(); filesById = {};
+  statuses = new Map(); fileCache = new Map(); statusCounter = 0;
+  statusSession = Math.floor(Math.random() * 2147483647) + 1;
   state = { connected: false, busy: false, magnets: [], message: 'Signed out.' }; send();
 });
 menu.addItem(menu.item('AllDebrid Library…', () => view.open()));
