@@ -110,16 +110,22 @@ async function loadPosters(token, revision) {
       }
     }
     file.poster = posterCache.get(identity);
+    file.posterPending = false;
+    state.libraryRevision = (state.libraryRevision || 0) + 1;
+    send();
   }
   if (!current()) return;
   state.libraryRevision = (state.libraryRevision || 0) + 1;
+  for (const file of files) file.posterPending = false;
   state.tmdbMessage = failed ? 'Unable to load TMDB posters. Check your API key and refresh to retry.' : '';
   send();
 }
 function updatePosters() {
   const revision = ++posterGeneration;
   for (const magnet of state.magnets) for (const file of magnet.files) {
-    file.poster = tmdbKey && posterCache.get(posterIdentity(file.metadata)) || null;
+    const identity = posterIdentity(file.metadata);
+    file.poster = tmdbKey && posterCache.get(identity) || null;
+    file.posterPending = !!tmdbKey && file.metadata.season === undefined && !!file.metadata.title && !posterCache.has(identity);
   }
   state.libraryRevision = (state.libraryRevision || 0) + 1;
   send();

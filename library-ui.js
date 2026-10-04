@@ -1,6 +1,5 @@
 const el = id => document.getElementById(id);
 let state = { connected: false, busy: false, magnets: [] };
-const expanded = new Set();
 let renderedKey = null;
 let playButtons = [];
 let emptyMessage = null;
@@ -53,47 +52,44 @@ function render() {
     });
     if (!matches && !files.length) continue;
     shown++;
-    const details = document.createElement('details');
-    details.open = !!query || expanded.has(magnet.id);
-    const summary = text('summary', magnet.name || 'Untitled');
-    summary.append(text('span', (magnet.ready ? 'Ready' : magnet.status || 'Unavailable') + ' · ' + magnet.files.length + ' video(s)', 'status'));
-    details.append(summary);
-    let loaded = false;
-    function loadFiles() {
-      if (loaded) return;
-      loaded = true;
-      if (magnet.error) details.append(text('p', magnet.error));
-      else if (!files.length) details.append(text('p', magnet.ready ? 'No videos found in this magnet.' : 'Files will be available when the magnet is ready.'));
-      for (const file of files) {
-        const row = document.createElement('div'); row.className = 'file';
-        const meta = file.metadata || {};
-        const episode = meta.season !== undefined ? 'S' + String(meta.season).padStart(2, '0') + 'E' + String(meta.episode).padStart(2, '0') : '';
-        const labels = [episode, meta.year, meta.resolution, meta.language, meta.codec, meta.source].filter(Boolean);
-        const info = text('div', meta.title || file.name);
-        if (labels.length) info.append(text('small', labels.join(' · ')));
-        info.append(text('small', file.path + ' · ' + size(file.size)));
-        const button = text('button', 'Play'); button.disabled = state.busy;
-        playButtons.push(button);
-        button.addEventListener('click', () => iina.postMessage('play', file.id));
-        row.append(info, button);
-        if (/^https:\/\/image\.tmdb\.org\/t\/p\/w185\/[a-zA-Z0-9_-]+\.(jpg|png)$/.test(file.poster || '')) {
+    if (magnet.error || !files.length) {
+      const notice = text('section', '', 'magnet-notice');
+      notice.append(text('div', magnet.name || 'Untitled'));
+      notice.append(text('small', magnet.error || (magnet.ready ? 'No videos found in this magnet.' : magnet.status || 'Files will be available when the magnet is ready.')));
+      container.append(notice);
+    }
+    for (const file of files) {
+      const row = document.createElement('article'); row.className = 'file';
+      const meta = file.metadata || {};
+      const episode = meta.season !== undefined ? 'S' + String(meta.season).padStart(2, '0') + 'E' + String(meta.episode).padStart(2, '0') : '';
+      const labels = [episode, meta.year, meta.resolution, meta.language, meta.codec, meta.source].filter(Boolean);
+      const info = text('div', meta.title || file.name, 'file-info');
+      if (labels.length) info.append(text('small', labels.join(' · ')));
+      info.append(text('small', file.path + ' · ' + size(file.size)));
+      info.append(text('small', magnet.name || 'Untitled', 'torrent-name'));
+      const button = text('button', 'Play'); button.disabled = state.busy;
+      playButtons.push(button);
+      button.addEventListener('click', () => iina.postMessage('play', file.id));
+      row.append(info, button);
+      const hasPoster = /^https:\/\/image\.tmdb\.org\/t\/p\/w185\/[a-zA-Z0-9_-]+\.(jpg|png)$/.test(file.poster || '');
+      if (hasPoster || (state.tmdbConfigured && meta.season === undefined)) {
+        const slot = text('div', '', 'poster-slot');
+        const placeholder = text('span', file.posterPending || hasPoster ? 'Loading poster…' : 'No poster', 'poster-placeholder');
+        slot.append(placeholder);
+        if (hasPoster) {
           const poster = document.createElement('img');
-          poster.className = 'poster'; poster.src = file.poster;
+          poster.className = 'poster';
           poster.alt = 'Poster: ' + (meta.title || file.name);
           poster.loading = 'lazy'; poster.referrerPolicy = 'no-referrer';
-          poster.addEventListener('error', () => { poster.hidden = true; });
-          row.append(poster);
+          poster.addEventListener('load', () => { placeholder.hidden = true; });
+          poster.addEventListener('error', () => { poster.hidden = true; placeholder.hidden = false; placeholder.textContent = 'No poster'; });
+          poster.src = file.poster;
+          slot.append(poster);
         }
-        details.append(row);
+        row.append(slot);
       }
+      container.append(row);
     }
-    details.addEventListener('toggle', () => {
-      if (!container.contains(details)) return;
-      if (details.open) { expanded.add(magnet.id); loadFiles(); }
-      else expanded.delete(magnet.id);
-    });
-    if (details.open) loadFiles();
-    container.append(details);
   }
   el('count').textContent = state.connected ? shown + ' / ' + state.magnets.length + ' magnets · ' + total + ' video(s)' : '';
   if (state.connected && !shown) {

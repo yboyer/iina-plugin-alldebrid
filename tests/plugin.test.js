@@ -376,6 +376,7 @@ test('TMDB failures retry on refresh, missing posters are cached, and playback r
   });
   h.handlers['tmdb-key']('key'); await tick();
   assert.match(h.state().tmdbMessage, /Unable to load TMDB/);
+  assert.equal(h.state().magnets[0].files[0].posterPending, false);
   h.handlers.play('1:0'); await tick();
   assert.equal(h.opened.length, 1);
   h.respond(url => url.includes('/search/movie') ? { results: [] } : tmdbLibrary(url));
@@ -392,6 +393,7 @@ test('pending TMDB responses are ignored after sign-out and key replacement', as
     let resolve;
     h.respond(() => new Promise(done => { resolve = done; }));
     h.handlers['tmdb-key']('old-key'); await tick();
+    assert.equal(h.state().magnets[0].files[0].posterPending, true);
     if (action === 'disconnect') h.handlers.disconnect();
     else h.handlers['tmdb-key']('');
     resolve({ results: [{ poster_path: '/stale.jpg' }] }); await tick();

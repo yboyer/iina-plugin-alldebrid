@@ -9,7 +9,7 @@ Requires IINA 1.4.0 or later on macOS with plugins enabled.
 1. Run `/Applications/IINA.app/Contents/MacOS/iina-plugin link .` from the repository directory.
 2. Open **Plugins → AllDebrid → AllDebrid Library…**.
 3. Click **Sign in to AllDebrid**, then open the displayed link and confirm the PIN in your browser.
-4. The library loads automatically. Expand a magnet and click **Play**.
+4. The library loads automatically. Videos are displayed directly; click **Play**.
 
 **Refresh** loads a full status snapshot on first use, then merges incremental changes (including deletions) using AllDebrid’s session/counter protocol. A server-requested full sync replaces the snapshot. Each new sign-in starts a fresh sync session. Refresh caches file listings for unchanged ready magnets and loads new or changed listings in batches of 500. Transfer statistics do not invalidate cached files; other status changes do. Deleted or non-ready magnets lose their cached files. Full syncs preserve matching cached listings. The cache lasts only for the current sign-in session. Failed listings are retried on the next refresh. Magnets that are not ready remain visible but cannot be played. Search ignores case and accents and matches every entered word across magnet names, video paths, and extracted metadata. Video titles, year, season/episode, resolution, language, codec, and source are detected locally from filenames when recognizable; the original path stays visible. Optional movie posters are retrieved from TMDB using the extracted title and year; detected TV episodes are excluded. Videos are identified by their file extensions; archives and ISO images are not scanned. The plugin does not add, delete, or restart magnets.
 
@@ -21,7 +21,7 @@ Your account must allow access to magnets and link unlocking. A direct link is g
 
 Enter your TMDB **API key (v3)** in the library and click **Save**. Get a key from your [TMDB account settings](https://www.themoviedb.org/settings/api). Saving an empty key disables posters. The key is stored in plugin preferences, not in a secure keychain, and survives sign-out and restarts.
 
-The first matching TMDB result with a poster is used, filtered by year when available. Filename parsing and matches may be imperfect. Results, including missing posters, are cached in memory; failed requests are retried on Refresh. TMDB errors do not block playback. Sign-out clears cached poster results.
+A placeholder reserves the poster space while metadata and images load. The torrent name is shown below each video’s path and size. The first matching TMDB result with a poster is used, filtered by year when available. Filename parsing and matches may be imperfect. Results, including missing posters, are cached in memory; failed requests are retried on Refresh. TMDB errors do not block playback. Sign-out clears cached poster results.
 
 ## Data and privacy
 

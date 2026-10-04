@@ -8,13 +8,12 @@ header p, #count { color: var(--muted); }
 button, select { font: inherit; border: 1px solid var(--border); border-radius: 7px; padding: 8px 12px; background: var(--surface); color: inherit; cursor: pointer; }
 button:disabled { opacity: .5; cursor: default; }
 select:focus-visible, button:focus-visible, input:focus-visible, a:focus-visible { outline: 3px solid #478be7; outline-offset: 2px; }
-#auth, details { background: var(--surface); border: 1px solid var(--panel-border); border-radius: 10px; padding: 16px; margin: 14px 0; }
+#auth, .file, .magnet-notice { background: var(--surface); border: 1px solid var(--panel-border); border-radius: 10px; padding: 16px; margin: 14px 0; }
 #tools { display: flex; align-items: center; gap: 16px; margin-top: 22px; }
 #search { flex: 1; min-width: 120px; background: var(--surface); color: var(--foreground); border: 1px solid var(--border); border-radius: 7px; padding: 10px; font: inherit; }
 #message { min-height: 20px; overflow-wrap: anywhere; }
-summary { cursor: pointer; overflow-wrap: anywhere; } .status { color: var(--muted); font-size: 12px; margin-left: 10px; }
-.file { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 12px 0; border-top: 1px solid var(--divider); }
-.file:first-of-type { margin-top: 12px; } .file div { min-width: 0; overflow-wrap: anywhere; }
+.file { display: flex; align-items: center; justify-content: space-between; gap: 14px;  }
+.file div { min-width: 0; overflow-wrap: anywhere; }
 .file small { display: block; color: var(--muted); margin-top: 4px; } a { color: var(--link); }
 [hidden] { display: none !important; }
 :root[data-theme="dark"] { --background: #17191e; --foreground: #e7eaf0; --surface: #23262e; --border: #444b59; --panel-border: #444b59; --divider: #444b59; --muted: #aeb7c7; --link: #86b9ff; color-scheme: dark; }
@@ -24,6 +23,9 @@ summary { cursor: pointer; overflow-wrap: anywhere; } .status { color: var(--mut
 .tmdb-settings { margin-top: 16px; }
 .tmdb-settings input { background: var(--surface); color: var(--foreground); border: 1px solid var(--border); border-radius: 7px; padding: 8px; font: inherit; }
 .tmdb-settings small, footer { color: var(--muted); }
-.file > div { flex: 1; }
-.poster { width: 64px; height: 96px; object-fit: cover; border-radius: 5px; order: -1; flex-shrink: 0; }
+.file > .file-info { flex: 1; }
+.poster-slot { position: relative; width: 64px; height: 96px; order: -1; flex-shrink: 0; border-radius: 5px; overflow: hidden; background: var(--background); }
+.poster-placeholder { display: flex; align-items: center; justify-content: center; height: 100%; padding: 0 4px; text-align: center; font-size: 11px; color: var(--muted); }
+.poster { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.magnet-notice small { color: var(--muted); }
 footer { margin-top: 24px; font-size: 11px; }

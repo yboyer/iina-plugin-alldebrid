@@ -26,35 +26,28 @@ function harness() {
 }
 const library = { connected: true, busy: false, libraryRevision: 1, magnets: [{ id: '1', name: 'Series', ready: true, files: [{ id: '1:0', name: 'Episode', path: 'Season/Episode.mkv', size: 42 }] }] };
 
-test('collapsed magnets load rows once on expansion and preserve rows across busy changes', () => {
+test('videos render directly with torrent name below path and preserve rows across busy changes', () => {
   const h = harness();
   h.receive(library);
-  const details = h.nodes.get('magnets').children[0];
-  assert.equal(details.children.length, 1);
-  details.toggle(true);
-  const row = details.children[1], button = row.children[1];
+  const row = h.nodes.get('magnets').children[0], button = row.children[1];
+  assert.equal(row.tag, 'article');
+  assert.equal(row.children[0].children[0].textContent, 'Season/Episode.mkv · 0.0 MiB');
+  assert.equal(row.children[0].children[1].textContent, 'Series');
   button.listeners.click();
   assert.deepEqual(h.messages.at(-1), ['play', '1:0']);
   h.receive({ ...library, busy: true });
-  assert.equal(h.nodes.get('magnets').children[0], details);
-  assert.equal(details.children[1], row);
+  assert.equal(h.nodes.get('magnets').children[0], row);
   assert.equal(button.disabled, true);
   h.receive(library);
   assert.equal(button.disabled, false);
-  details.toggle(false); details.toggle(true);
-  assert.equal(details.children.length, 2);
 });
-test('search loads matching paths, revisions preserve expansion, and empty states follow busy', () => {
+test('search shows matching paths directly and empty states follow busy', () => {
   const h = harness();
   h.receive(library);
   h.nodes.get('search').value = 'season';
   h.nodes.get('search').listeners.input();
-  assert.equal(h.nodes.get('magnets').children[0].open, true);
-  assert.equal(h.nodes.get('magnets').children[0].children.length, 2);
-  h.nodes.get('magnets').children[0].toggle(true);
-  h.nodes.get('search').value = '';
-  h.receive({ ...library, libraryRevision: 2 });
-  assert.equal(h.nodes.get('magnets').children[0].open, true);
+  assert.equal(h.nodes.get('magnets').children.length, 1);
+  assert.equal(h.nodes.get('magnets').children[0].children[0].textContent, 'Episode');
   h.receive({ connected: true, busy: true, libraryRevision: 3, magnets: [] });
   const empty = h.nodes.get('magnets').children[0];
   assert.equal(empty.hidden, true);
@@ -82,10 +75,10 @@ test('search ignores accents and combines words across magnet names and file met
   ] }] });
   h.nodes.get('search').value = '  CINEMA amelie 1080p ';
   h.nodes.get('search').listeners.input();
-  const details = h.nodes.get('magnets').children[0];
-  assert.equal(details.children.length, 2);
-  assert.equal(details.children[1].children[0].textContent, 'Amélie');
-  assert.equal(details.children[1].children[0].children[0].textContent, '2001 · 1080P');
+  assert.equal(h.nodes.get('magnets').children.length, 1);
+  const row = h.nodes.get('magnets').children[0];
+  assert.equal(row.children[0].textContent, 'Amélie');
+  assert.equal(row.children[0].children[0].textContent, '2001 · 1080P');
 });
 
 test('TMDB settings clear submitted key and posters load lazily with failure fallback', () => {
@@ -95,11 +88,27 @@ test('TMDB settings clear submitted key and posters load lazily with failure fal
   assert.deepEqual(h.messages.at(-1), ['tmdb-key', 'key']);
   assert.equal(h.nodes.get('tmdb-key').value, '');
   h.receive({ ...library, tmdbConfigured: true, magnets: [{ ...library.magnets[0], files: [{ ...library.magnets[0].files[0], poster: 'https://image.tmdb.org/t/p/w185/poster.jpg' }] }] });
-  const details = h.nodes.get('magnets').children[0];
-  details.toggle(true);
-  const poster = details.children[1].children[2];
+  const slot = h.nodes.get('magnets').children[0].children[2];
+  const placeholder = slot.children[0], poster = slot.children[1];
+  assert.equal(placeholder.textContent, 'Loading poster…');
+  poster.listeners.load();
+  assert.equal(placeholder.hidden, true);
   assert.equal(poster.tag, 'img');
   assert.equal(poster.loading, 'lazy');
   poster.listeners.error();
   assert.equal(poster.hidden, true);
+  assert.equal(placeholder.hidden, false);
+  assert.equal(placeholder.textContent, 'No poster');
+});
+
+test('poster lookup has a placeholder and unavailable magnets retain status without collapse', () => {
+  const h = harness();
+  h.receive({ ...library, tmdbConfigured: true, magnets: [{ ...library.magnets[0], files: [{ ...library.magnets[0].files[0], posterPending: true }] }] });
+  const slot = h.nodes.get('magnets').children[0].children[2];
+  assert.equal(slot.children[0].textContent, 'Loading poster…');
+  h.receive({ ...library, libraryRevision: 2, magnets: [{ id: '2', name: 'Pending torrent', ready: false, status: 'Downloading', files: [] }] });
+  const notice = h.nodes.get('magnets').children[0];
+  assert.equal(notice.tag, 'section');
+  assert.equal(notice.children[0].textContent, 'Pending torrent');
+  assert.equal(notice.children[1].textContent, 'Downloading');
 });
