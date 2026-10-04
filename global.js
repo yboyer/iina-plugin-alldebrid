@@ -102,7 +102,7 @@ async function refresh(token) {
   const magnets = Array.isArray(data.magnets) ? data.magnets : data.magnets ? [data.magnets] : [];
   filesById = {};
   const pending = [], entries = {};
-  state.magnets = magnets.map(m => {
+  state.magnets = magnets.slice().sort((a, b) => (Number(b.uploadDate) || 0) - (Number(a.uploadDate) || 0)).map(m => {
     const magnet = { id: String(m.id), name: m.filename, status: m.status, ready: Number(m.statusCode) === 4, files: [] };
     if (magnet.ready) {
       const signature = fingerprint(m);
