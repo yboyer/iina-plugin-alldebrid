@@ -143,15 +143,15 @@ function libraryResponse(magnets) {
     return { link: 'https://cdn.example/film.mp4' };
   };
 }
-test('817 ready magnets use five file requests with indexed form fields', async () => {
+test('817 ready magnets use two file requests with indexed form fields', async () => {
   const h = await harness();
   h.respond(libraryResponse(Array.from({ length: 817 }, (_, index) => ({ id: index + 1, statusCode: 4 }))));
   h.handlers.refresh(); await tick();
   const requests = h.calls.filter(call => call.url.endsWith('magnet/files'));
-  assert.equal(requests.length, 5);
-  assert.equal(Object.keys(requests[0].options.data).length, 200);
-  assert.equal(requests[0].options.data['id[199]'], '200');
-  assert.equal(Object.keys(requests[4].options.data).length, 17);
+  assert.equal(requests.length, 2);
+  assert.equal(Object.keys(requests[0].options.data).length, 500);
+  assert.equal(requests[0].options.data['id[499]'], '500');
+  assert.equal(Object.keys(requests[1].options.data).length, 317);
   assert.equal(h.state().magnets.filter(magnet => magnet.files.length === 1).length, 817);
 });
 test('unchanged magnets retain files and playback source links', async () => {
@@ -167,19 +167,19 @@ test('unchanged magnets retain files and playback source links', async () => {
 });
 test('refresh retries only failed batches', async () => {
   const h = await harness();
-  const magnets = Array.from({ length: 201 }, (_, index) => ({ id: index + 1, statusCode: 4 }));
+  const magnets = Array.from({ length: 501 }, (_, index) => ({ id: index + 1, statusCode: 4 }));
   const respond = libraryResponse(magnets);
   h.respond((url, options) => {
     if (url.endsWith('magnet/files') && options.data['id[0]'] === '1') throw new Error('Network failure');
     return respond(url, options);
   });
   h.handlers.refresh(); await tick();
-  assert.match(h.state().message, /200 magnet/);
+  assert.match(h.state().message, /500 magnet/);
   h.calls.length = 0;
   h.respond(respond);
   h.handlers.refresh(); await tick();
   assert.equal(h.calls.length, 2);
-  assert.equal(Object.keys(h.calls[1].options.data).length, 200);
+  assert.equal(Object.keys(h.calls[1].options.data).length, 500);
   assert.equal(h.state().magnets.every(magnet => magnet.files.length === 1 && !magnet.error), true);
 });
 test('sign-out ignores pending file responses', async () => {

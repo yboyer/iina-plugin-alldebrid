@@ -1,7 +1,7 @@
 const { http, menu, standaloneWindow: view, utils, preferences, global: players } = iina;
 const { videos, metadata } = require('./library.js');
 const API = 'https://api.alldebrid.com/';
-const FILE_BATCH_SIZE = 200;
+const FILE_BATCH_SIZE = 500;
 let statusSession = Math.floor(Math.random() * 2147483647) + 1;
 let statusCounter = 0;
 let statuses = new Map();
