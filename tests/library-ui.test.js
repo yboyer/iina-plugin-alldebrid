@@ -112,3 +112,17 @@ test('poster lookup has a placeholder and unavailable magnets retain status with
   assert.equal(notice.children[0].textContent, 'Pending torrent');
   assert.equal(notice.children[1].textContent, 'Downloading');
 });
+
+test('delete targets the individual video and follows busy state', () => {
+  const h = harness();
+  h.receive(library);
+  const row = h.nodes.get('magnets').children[0];
+  const button = row.children.at(-1);
+  assert.equal(button.textContent, 'Delete');
+  button.listeners.click();
+  assert.deepEqual(h.messages.at(-1), ['delete-media', '1:0']);
+  h.receive({ ...library, busy: true });
+  assert.equal(button.disabled, true);
+  h.receive(library);
+  assert.equal(button.disabled, false);
+});

@@ -401,3 +401,44 @@ test('pending TMDB responses are ignored after sign-out and key replacement', as
     if (action === 'disconnect') assert.deepEqual(h.state().magnets, []);
   }
 });
+
+const deletionLibrary = url => url.endsWith('magnet/status')
+  ? { magnets: [{ id: 1, filename: 'Two videos', statusCode: 4 }] }
+  : { magnets: [{ id: 1, files: [{ n: 'one.mkv', l: 'a' }, { n: 'two.mkv', l: 'b' }] }] };
+test('media deletion persists across refresh and restart and deletes the magnet only for the last video', async () => {
+  const storage = {};
+  const h = await harness('secret', deletionLibrary, storage);
+  h.respond(deletionLibrary);
+  h.handlers['delete-media']('1:0'); await tick();
+  assert.equal(h.calls.length, 0);
+  assert.deepEqual(h.state().magnets[0].files.map(file => file.id), ['1:1']);
+  h.handlers.refresh(); await tick();
+  assert.deepEqual(h.state().magnets[0].files.map(file => file.id), ['1:1']);
+  const restarted = await harness('secret', deletionLibrary, storage);
+  assert.deepEqual(restarted.state().magnets[0].files.map(file => file.id), ['1:1']);
+  restarted.respond(() => ({}));
+  restarted.handlers['delete-media']('1:1'); await tick();
+  assert.equal(restarted.calls.length, 1);
+  assert.match(restarted.calls[0].url, /v4\/magnet\/delete$/);
+  assert.equal(restarted.calls[0].options.data.id, '1');
+  assert.deepEqual(restarted.state().magnets, []);
+  restarted.respond(() => ({ magnets: [], counter: 1 }));
+  restarted.handlers.refresh(); await tick();
+  assert.deepEqual(restarted.state().magnets, []);
+});
+test('failed last-media deletion preserves the video and disconnect ignores a pending deletion', async () => {
+  const h = await harness('secret', deletionLibrary);
+  h.handlers['delete-media']('1:0'); await tick();
+  h.respond(() => { throw new Error('Offline'); });
+  h.handlers['delete-media']('1:1'); await tick();
+  assert.equal(h.state().magnets[0].files[0].id, '1:1');
+  assert.equal(h.state().busy, false);
+  assert.match(h.state().message, /Unable to connect/);
+  let finish;
+  h.respond(() => new Promise(resolve => { finish = resolve; }));
+  h.handlers['delete-media']('1:1');
+  h.handlers.disconnect();
+  finish({}); await tick();
+  assert.deepEqual(h.state().magnets, []);
+  assert.equal(h.state().message, 'Signed out.');
+});

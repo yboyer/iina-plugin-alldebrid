@@ -11,12 +11,21 @@ const TRANSFER_FIELDS = new Set(['status', 'downloaded', 'uploaded', 'downloadSp
 function fileSignature(magnet) {
   return JSON.stringify(Object.keys(magnet).filter(key => !TRANSFER_FIELDS.has(key)).sort().map(key => [key, magnet[key]]));
 }
+let hiddenMedia = new Set();
+try {
+  const saved = JSON.parse(preferences.get('hidden-media') || '[]');
+  if (Array.isArray(saved)) hiddenMedia = new Set(saved.filter(value => typeof value === 'string'));
+} catch (_) {}
+function mediaIdentity(magnetId, file) {
+  return JSON.stringify([magnetId, file.path, file.size]);
+}
 function setFiles(magnet, files) {
   magnet.files = files.map((file, index) => {
     const id = magnet.id + ':' + index;
+    if (hiddenMedia.has(mediaIdentity(magnet.id, file))) return null;
     filesById[id] = file;
     return { id, name: file.name, path: file.path, size: file.size, metadata: metadata(file.name) };
-  });
+  }).filter(Boolean);
 }
 let generation = 0;
 let busy = false;
@@ -236,6 +245,31 @@ async function play(id, token) {
     } catch (error) { reject(error); }
   }, 0));
 }
+async function deleteMedia(id, token) {
+  const file = filesById[id];
+  const magnet = state.magnets.find(item => item.files.some(media => media.id === id));
+  if (!file || !magnet) throw new Error('File not found. Refresh the library.');
+  if (magnet.files.length === 1) {
+    state.message = 'Deleting ' + magnet.name + '…'; send();
+    await request('v4/magnet/delete', { id: magnet.id }, apiKey);
+    if (!valid(token)) return;
+    statuses.delete(magnet.id);
+    fileCache.delete(magnet.id);
+    state.magnets = state.magnets.filter(item => item !== magnet);
+  } else {
+    const next = new Set(hiddenMedia);
+    next.add(mediaIdentity(magnet.id, file));
+    try {
+      preferences.set('hidden-media', JSON.stringify(Array.from(next)));
+      preferences.sync();
+    } catch (_) { throw new Error('Unable to save the media deletion. Try again.'); }
+    hiddenMedia = next;
+    magnet.files = magnet.files.filter(media => media.id !== id);
+  }
+  delete filesById[id];
+  state.message = 'Deleted ' + file.name;
+  updatePosters();
+}
 async function task(action) {
   if (busy) return;
   busy = true; state.busy = true; send();
@@ -310,6 +344,7 @@ view.onMessage('tmdb-key', value => {
 view.onMessage('refresh', () => task(refresh));
 view.onMessage('connect', () => { if (busy) return; cancel(); task(connect); });
 view.onMessage('play', id => task(token => play(id, token)));
+view.onMessage('delete-media', id => task(token => deleteMedia(id, token)));
 view.onMessage('open-pin', () => { if (state.pin) utils.open(state.pin.url); });
 view.onMessage('disconnect', () => {
   try { saveKey(''); } catch (error) { fail(error); return; }

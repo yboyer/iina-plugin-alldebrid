@@ -29,3 +29,5 @@ select:focus-visible, button:focus-visible, input:focus-visible, a:focus-visible
 .poster { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .magnet-notice small { color: var(--muted); }
 footer { margin-top: 24px; font-size: 11px; }
+
+.delete-media { color: #c0392b; }

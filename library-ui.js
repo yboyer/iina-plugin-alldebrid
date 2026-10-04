@@ -1,7 +1,7 @@
 const el = id => document.getElementById(id);
 let state = { connected: false, busy: false, magnets: [] };
 let renderedKey = null;
-let playButtons = [];
+let mediaButtons = [];
 let emptyMessage = null;
 function text(tag, value, className) {
   const node = document.createElement(tag);
@@ -30,7 +30,7 @@ function render() {
   el('tmdb-status').textContent = state.tmdbMessage || (state.tmdbConfigured ? 'TMDB enabled. Save an empty key to disable.' : 'Add your TMDB API key to enable movie posters.');
   el('pin').hidden = !state.pin;
   if (state.pin) { el('code').textContent = state.pin.code; el('pin-link').href = state.pin.url; }
-  for (const button of playButtons) button.disabled = state.busy;
+  for (const button of mediaButtons) button.disabled = state.busy;
   if (emptyMessage) emptyMessage.hidden = state.busy;
   const query = normalize(el('search').value).trim();
   const renderKey = JSON.stringify([state.connected, state.libraryRevision, query, el('ready-only').checked]);
@@ -38,7 +38,7 @@ function render() {
   renderedKey = renderKey;
   const container = el('magnets');
   container.replaceChildren();
-  playButtons = [];
+  mediaButtons = [];
   emptyMessage = null;
   let total = 0, shown = 0;
   for (const magnet of state.magnets) {
@@ -68,8 +68,13 @@ function render() {
       info.append(text('small', file.path + ' · ' + size(file.size)));
       info.append(text('small', magnet.name || 'Untitled', 'torrent-name'));
       const button = text('button', 'Play'); button.disabled = state.busy;
-      playButtons.push(button);
+      mediaButtons.push(button);
       button.addEventListener('click', () => iina.postMessage('play', file.id));
+      const remove = text('button', 'Delete', 'delete-media');
+      remove.disabled = state.busy;
+      remove.title = 'Remove this video; the magnet is deleted from AllDebrid after its last video.';
+      mediaButtons.push(remove);
+      remove.addEventListener('click', () => iina.postMessage('delete-media', file.id));
       row.append(info, button);
       const hasPoster = /^https:\/\/image\.tmdb\.org\/t\/p\/w185\/[a-zA-Z0-9_-]+\.(jpg|png)$/.test(file.poster || '');
       if (hasPoster || (state.tmdbConfigured && meta.season === undefined)) {
@@ -88,6 +93,7 @@ function render() {
         }
         row.append(slot);
       }
+      row.append(remove);
       container.append(row);
     }
   }
