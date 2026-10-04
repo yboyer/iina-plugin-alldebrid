@@ -11,17 +11,17 @@ Requires IINA 1.4.0 or later on macOS with plugins enabled.
 3. Click **Sign in to AllDebrid**, then open the displayed link and confirm the PIN in your browser.
 4. The library loads automatically. Expand a magnet and click **Play**.
 
-**Refresh** loads a full status snapshot on first use, then merges incremental changes (including deletions) using AllDebrid’s session/counter protocol. A server-requested full sync replaces the snapshot. Each new sign-in starts a fresh sync session. Refresh checks all current magnet statuses and reuses cached files for unchanged, ready magnets. Missing or expired files are loaded in batches of 100. File listings are cached for 24 hours, including between IINA launches; failed listings are retried on the next refresh. Magnets that are not ready remain visible but cannot be played. Search ignores case and accents and matches every entered word across magnet names, video paths, and extracted metadata. Video titles, year, season/episode, resolution, language, codec, and source are detected locally from filenames when recognizable; the original path stays visible. No external metadata service is used. Videos are identified by their file extensions; archives and ISO images are not scanned. The plugin does not add, delete, or restart magnets.
-
-**Clear cache** clears the in-memory and saved file-listing cache without signing out. The displayed library remains usable; the next **Refresh** reloads file listings. The button is also available before sign-in and is disabled while an operation is running.
+**Refresh** loads a full status snapshot on first use, then merges incremental changes (including deletions) using AllDebrid’s session/counter protocol. A server-requested full sync replaces the snapshot. Each new sign-in starts a fresh sync session. Refresh reloads file listings for ready magnets in batches of 100. Failed listings are retried on the next refresh. Magnets that are not ready remain visible but cannot be played. Search ignores case and accents and matches every entered word across magnet names, video paths, and extracted metadata. Video titles, year, season/episode, resolution, language, codec, and source are detected locally from filenames when recognizable; the original path stays visible. No external metadata service is used. Videos are identified by their file extensions; archives and ISO images are not scanned. The plugin does not add, delete, or restart magnets.
 
 Your account must allow access to magnets and link unlocking. A direct link is generated for each playback request; delayed links are polled for up to ten minutes. Playback depends on file availability and the formats supported by IINA.
 
+**Theme** offers **System**, **Light**, and **Dark**. System follows the macOS appearance. Your choice is saved in the plugin preferences and preserved when signing out.
+
 ## Data and privacy
 
-The API key obtained through PIN authentication is kept **in memory for the current IINA session**. Sign in again after restarting IINA. **Sign out** clears the key and the library cache and cancels pending operations; it does not revoke the key on AllDebrid. To revoke it, visit https://alldebrid.com/apikeys/.
+The API key obtained through PIN authentication is kept **in memory for the current IINA session**. Sign in again after restarting IINA. **Sign out** clears the key and the displayed library and cancels pending operations; it does not revoke the key on AllDebrid. To revoke it, visit https://alldebrid.com/apikeys/.
 
-No third-party services or telemetry. The library cache (file names, paths, sizes, and AllDebrid file links) is saved locally in the plugin's IINA preferences. It is reused only after signing in to the same account. API keys and unlocked playback URLs are not cached. API requests go only to AllDebrid; IINA then streams the video from the direct link's host. IINA may retain playback URLs in its normal history.
+No third-party services or telemetry. File listings and AllDebrid file links are kept only in memory for the current session. API requests go only to AllDebrid; IINA then streams the video from the direct link's host. IINA may retain playback URLs in its normal history.
 
 ## Development
 
