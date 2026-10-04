@@ -186,7 +186,21 @@ async function loadPosters(token: number, revision: number) {
   async function get(path: string, missingAllowed = false) {
     await new Promise(resolve => setTimeout(resolve, 150))
     if (!current()) return undefined
-    const response = await http.get(`https://api.themoviedb.org/3/${path}`, {})
+    let response: IinaResponse
+    try {
+      response = await http.get(`https://api.themoviedb.org/3/${path}`, {})
+    } catch (error) {
+      if (!current()) return undefined
+      if (
+        missingAllowed &&
+        error &&
+        typeof error === 'object' &&
+        'statusCode' in error &&
+        error.statusCode === 404
+      )
+        return null
+      throw error
+    }
     if (!current()) return undefined
     if (missingAllowed && response.statusCode === 404) return null
     if (response.statusCode !== 200) throw new Error('TMDB request failed')

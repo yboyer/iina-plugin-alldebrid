@@ -670,7 +670,8 @@ test('TMDB shares series results and retries episode failures without losing the
       if (offline) throw new Error('Offline')
       return { name: 'Le retour' }
     }
-    if (url.includes('/episode/8')) return { httpStatus: 404 }
+    if (url.includes('/episode/8'))
+      return Promise.reject({ statusCode: 404, text: '{"success":false}' })
     return seriesLibrary(url)
   })
   h.handlers['tmdb-key']('key')
