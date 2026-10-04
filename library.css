@@ -1,0 +1,20 @@
+:root { color-scheme: light dark; font: 14px -apple-system, BlinkMacSystemFont, sans-serif; }
+body { margin: 0; padding: 24px; background: #f4f5f7; color: #19202b; }
+header { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+h1 { margin: 0; font-size: 26px; } h2 { font-size: 18px; }
+header p, #count { color: #667085; }
+.actions { display: flex; gap: 8px; }
+button { border: 1px solid #bdc5d0; border-radius: 7px; padding: 8px 12px; background: #fff; color: inherit; cursor: pointer; }
+button:disabled { opacity: .5; cursor: default; }
+button:focus-visible, input:focus-visible, a:focus-visible { outline: 3px solid #478be7; outline-offset: 2px; }
+#auth, details { background: #fff; border: 1px solid #dce0e7; border-radius: 10px; padding: 16px; margin: 14px 0; }
+#tools { display: flex; align-items: center; gap: 16px; margin-top: 22px; }
+#search { flex: 1; min-width: 120px; border: 1px solid #bdc5d0; border-radius: 7px; padding: 10px; font: inherit; }
+#message { min-height: 20px; overflow-wrap: anywhere; }
+summary { cursor: pointer; overflow-wrap: anywhere; } .status { color: #667085; font-size: 12px; margin-left: 10px; }
+.file { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 12px 0; border-top: 1px solid #e5e7eb; }
+.file:first-of-type { margin-top: 12px; } .file div { min-width: 0; overflow-wrap: anywhere; }
+.file small { display: block; color: #667085; margin-top: 4px; } a { color: #2468bd; }
+[hidden] { display: none !important; }
+@media (prefers-color-scheme: dark) { body { background: #17191e; color: #e7eaf0; } #auth, details, button, #search { background: #23262e; border-color: #444b59; color: inherit; } header p, #count, .status, .file small { color: #aeb7c7; } .file { border-color: #444b59; } a { color: #86b9ff; } }
+@media (max-width: 560px) { header, #tools { align-items: stretch; flex-direction: column; } body { padding: 16px; } }

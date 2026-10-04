@@ -1,0 +1,146 @@
+const { http, menu, standaloneWindow: view, utils, global: players } = iina;
+const { videos } = require('./library.js');
+const API = 'https://api.alldebrid.com/';
+let generation = 0;
+let busy = false;
+let pinTimer = null;
+let filesById = {};
+let apiKey = utils.keyChainRead('alldebrid', 'apiKey') || '';
+let state = { connected: !!apiKey, busy: false, magnets: [], message: '' };
+function send() { view.postMessage('state', state); }
+function valid(token) { return token === generation; }
+function saveKey(key) {
+  if (!utils.keyChainWrite('alldebrid', 'apiKey', key)) throw new Error('Unable to update the API key in the macOS Keychain.');
+  apiKey = key;
+  state.connected = !!key;
+}
+function fail(error) {
+  state.message = error.message || 'An error occurred.';
+  send();
+}
+async function request(path, data, key, get) {
+  const headers = {};
+  if (key) headers.Authorization = 'Bearer ' + key;
+  let response;
+  try {
+    if (get) response = await http.get(API + path, { headers });
+    else {
+      headers['Content-Type'] = 'application/x-www-form-urlencoded';
+      response = await http.post(API + path, { headers, data: data || {} });
+    }
+  } catch (error) {
+    if (error && typeof error.text === 'string') response = error;
+    else throw new Error('Unable to connect to AllDebrid. Try again.');
+  }
+  let body;
+  try { body = JSON.parse(response.text); }
+  catch (_) { throw new Error('Invalid AllDebrid response (HTTP ' + response.statusCode + ').'); }
+  if (body.status !== 'success') {
+    const code = body.error && body.error.code || 'UNKNOWN';
+    throw new Error('AllDebrid: ' + code);
+  }
+  return body.data;
+}
+async function refresh(token) {
+  const key = apiKey;
+  if (!key) throw new Error('Connect your AllDebrid account.');
+  state.message = 'Loading magnets…'; send();
+  const data = await request('v4.1/magnet/status', {}, key);
+  if (!valid(token)) return;
+  const magnets = Array.isArray(data.magnets) ? data.magnets : data.magnets ? [data.magnets] : [];
+  filesById = {};
+  state.magnets = magnets.map(m => ({ id: String(m.id), name: m.filename, status: m.status, ready: Number(m.statusCode) === 4, files: [] }));
+  send();
+  let errors = 0;
+  // Sequential requests stay well below AllDebrid's rate limit.
+  for (const magnet of state.magnets) {
+    if (!magnet.ready) continue;
+    await new Promise(resolve => setTimeout(resolve, 150));
+    if (!valid(token)) return;
+    try {
+      const tree = await request('v4/magnet/files', { 'id[]': magnet.id }, key);
+      if (!valid(token)) return;
+      const item = (tree.magnets || []).find(m => String(m.id) === magnet.id);
+      if (!item || item.error) throw new Error('Files unavailable');
+      magnet.files = videos(item.files).map((file, index) => {
+        const id = magnet.id + ':' + index;
+        filesById[id] = file;
+        return { id, name: file.name, path: file.path, size: file.size };
+      });
+    } catch (_) { magnet.error = 'Unable to load files. Refresh to try again.'; errors++; }
+    state.message = 'Loading: ' + magnet.name; send();
+  }
+  state.message = errors ? errors + ' magnet(s) could not be loaded.' : 'Library up to date.';
+}
+async function play(id, token) {
+  const file = filesById[id];
+  if (!file) throw new Error('File not found. Refresh the library.');
+  const key = apiKey;
+  state.message = 'Preparing ' + file.name + '…'; send();
+  let data = await request('v4/link/unlock', { link: file.link }, key);
+  if (!valid(token)) return;
+  if (data.delayed) {
+    const delayed = data.delayed;
+    for (let attempt = 0; attempt < 120; attempt++) {
+      await new Promise(resolve => setTimeout(resolve, 5000));
+      if (!valid(token)) return;
+      data = await request('v4/link/delayed', { id: delayed }, key);
+      if (!valid(token)) return;
+      if (Number(data.status) === 3) throw new Error('AllDebrid could not prepare this link.');
+      if (Number(data.status) === 2) break;
+      state.message = 'Preparing the link…'; send();
+    }
+  }
+  if (!/^https?:\/\//i.test(data.link || '')) throw new Error('Playback link unavailable. Try again later.');
+  players.createPlayerInstance({ url: data.link, enablePlugins: true });
+  state.message = 'Playing ' + file.name;
+}
+async function task(action) {
+  if (busy) return;
+  busy = true; state.busy = true; send();
+  const token = generation;
+  try { await action(token); }
+  catch (error) { if (valid(token)) fail(error); }
+  finally { if (valid(token)) { busy = false; state.busy = false; send(); } }
+}
+function cancel() {
+  generation++;
+  if (pinTimer !== null) clearTimeout(pinTimer);
+  pinTimer = null; busy = false;
+  state.busy = false; delete state.pin;
+}
+async function connect(token) {
+  const pin = await request('v4.1/pin/get', {}, null, true);
+  if (!valid(token)) return;
+  if (!/^https:\/\/alldebrid\.com\/pin\//.test(pin.user_url || '')) throw new Error('Invalid sign-in URL.');
+  state.pin = { code: pin.pin, url: pin.user_url };
+  state.message = 'Confirm the code in your browser.'; send();
+  const deadline = Date.now() + Number(pin.expires_in || 600) * 1000;
+  async function poll() {
+    if (!valid(token)) return;
+    try {
+      if (Date.now() >= deadline) throw new Error('Code expired. Start signing in again.');
+      const result = await request('v4/pin/check', { pin: pin.pin, check: pin.check });
+      if (!valid(token)) return;
+      if (result.activated && result.apikey) {
+        saveKey(result.apikey); delete state.pin;
+        task(refresh);
+      } else pinTimer = setTimeout(poll, 5000);
+    } catch (error) { if (valid(token)) { delete state.pin; fail(error); } }
+  }
+  pinTimer = setTimeout(poll, 5000);
+}
+view.setProperty({ title: 'AllDebrid Library', resizable: true });
+view.setFrame(900, 650);
+view.loadFile('library.html');
+view.onMessage('ready', () => { send(); if (state.connected && !state.magnets.length) task(refresh); });
+view.onMessage('refresh', () => task(refresh));
+view.onMessage('connect', () => { if (busy) return; cancel(); task(connect); });
+view.onMessage('play', id => task(token => play(id, token)));
+view.onMessage('open-pin', () => { if (state.pin) utils.open(state.pin.url); });
+view.onMessage('disconnect', () => {
+  try { saveKey(''); } catch (error) { fail(error); return; }
+  cancel(); filesById = {};
+  state = { connected: false, busy: false, magnets: [], message: 'Signed out.' }; send();
+});
+menu.addItem(menu.item('AllDebrid Library…', () => view.open()));

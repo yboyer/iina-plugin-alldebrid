@@ -1,0 +1,17 @@
+{
+  "name": "AllDebrid",
+  "version": "0.1.0",
+  "identifier": "io.iina.alldebrid.library",
+  "author": {
+    "name": "IINA AllDebrid"
+  },
+  "description": "Browse and play videos from your AllDebrid magnets.",
+  "entry": "main.js",
+  "globalEntry": "global.js",
+  "permissions": [
+    "network-request"
+  ],
+  "allowedDomains": [
+    "api.alldebrid.com"
+  ]
+}
