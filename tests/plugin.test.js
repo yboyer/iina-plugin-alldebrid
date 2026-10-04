@@ -7,6 +7,8 @@ const tick = () => new Promise(resolve => setImmediate(resolve));
 async function harness(key = 'secret', storage = {}, username = 'test-user', initialResponse = () => ({ magnets: [] })) {
   const handlers = {}, calls = [], opened = [], timers = [];
   let lastState;
+  let onMainThread = false, deferPlayback = false;
+  const playbackTimers = [];
   let bootCalls = [];
   let response = () => ({ magnets: [] });
   const request = async (url, options) => {
@@ -16,7 +18,17 @@ async function harness(key = 'secret', storage = {}, username = 'test-user', ini
   };
   const context = {
     require: name => require('../' + name),
-    setTimeout: (callback, delay) => { if (delay === 150) { callback(); return 0; } timers.push(callback); return timers.length; },
+    setTimeout: (callback, delay) => {
+      if (delay === 0) {
+        const run = () => {
+          onMainThread = true;
+          try { callback(); } finally { onMainThread = false; }
+        };
+        if (deferPlayback) playbackTimers.push(run);
+        else queueMicrotask(run);
+        return 0;
+      }
+      if (delay === 150) { callback(); return 0; } timers.push(callback); return timers.length; },
     clearTimeout: id => { timers[id - 1] = null; },
     iina: {
       http: { get: request, post: request },
@@ -24,7 +36,10 @@ async function harness(key = 'secret', storage = {}, username = 'test-user', ini
       menu: { item: (name, fn) => fn, addItem() {} },
       standaloneWindow: { setProperty() {}, setFrame() {}, loadFile() {}, open() {}, onMessage: (name, fn) => { handlers[name] = fn; }, postMessage: (_, state) => { lastState = JSON.parse(JSON.stringify(state)); } },
       utils: { open() {} },
-      global: { createPlayerInstance: options => opened.push(options) }
+      global: { createPlayerInstance: options => {
+        assert.equal(onMainThread, true, 'player windows must be created from the main-thread timer');
+        return opened.push(options);
+      } }
     }
   };
   vm.runInNewContext(fs.readFileSync(require.resolve('../global.js'), 'utf8'), context);
@@ -35,7 +50,7 @@ async function harness(key = 'secret', storage = {}, username = 'test-user', ini
     bootCalls = calls.slice();
     calls.length = 0;
   }
-  return { handlers, calls, bootCalls, opened, timers, refusePlayback: () => { context.iina.global.createPlayerInstance = () => false; }, state: () => lastState, respond: fn => { response = fn; } };
+  return { handlers, calls, bootCalls, opened, timers, playbackTimers, deferPlayback: () => { deferPlayback = true; }, refusePlayback: () => { context.iina.global.createPlayerInstance = () => false; }, state: () => lastState, respond: fn => { response = fn; } };
 }
 test('recursive video discovery excludes archives, audio and files without links', () => {
   assert.deepEqual(videos([{ n: 'Season', e: [{ n: 'Episode.MKV', s: 42, l: 'https://alldebrid.com/f/a' }, { n: 'a.zip', l: 'x' }, { n: 'b.mp3', l: 'x' }, { n: 'c.mp4' }] }]), [{ name: 'Episode.MKV', path: 'Season/Episode.MKV', size: 42, link: 'https://alldebrid.com/f/a' }]);
@@ -214,4 +229,64 @@ test('sign-out clears persistent cache and ignores pending file responses', asyn
   assert.deepEqual(h.state().magnets, []);
   assert.deepEqual(JSON.parse(storage['library-cache-v1']).entries, {});
   assert.equal(JSON.parse(storage['library-cache-v1']).account, '');
+});
+
+test('disconnect cancels playback queued for the main thread', async () => {
+  const h = await harness();
+  h.respond(libraryResponse([{ id: 1, statusCode: 4 }]));
+  h.handlers.refresh(); await tick();
+  h.deferPlayback();
+  h.handlers.play('1:0'); await tick();
+  assert.equal(h.playbackTimers.length, 1);
+  assert.equal(h.opened.length, 0);
+  assert.equal(h.state().busy, true);
+  h.handlers.disconnect();
+  h.playbackTimers.shift()(); await tick();
+  assert.equal(h.opened.length, 0);
+  assert.equal(h.state().connected, false);
+  assert.equal(h.state().message, 'Signed out.');
+  assert.equal(h.state().busy, false);
+});
+
+test('PIN polling retries transient failures and completes authentication', async () => {
+  for (const failure of [new Error('Offline'), { statusCode: 503, text: 'Unavailable' }, { statusCode: 429, text: '{}' }]) {
+    const h = await harness('');
+    let checks = 0;
+    h.respond(url => {
+      if (url.endsWith('pin/get')) return { pin: 'ABCD', check: 'check', expires_in: 600, user_url: 'https://alldebrid.com/pin/?pin=ABCD' };
+      if (url.endsWith('pin/check')) {
+        if (++checks === 1) throw failure;
+        return { activated: true, apikey: 'new-secret' };
+      }
+      return { magnets: [] };
+    });
+    h.handlers.connect(); await tick();
+    await h.timers[0](); await tick();
+    assert.equal(h.state().pin.code, 'ABCD');
+    assert.match(h.state().message, /Retrying/);
+    await h.timers[1](); await tick();
+    assert.equal(h.state().connected, true);
+    assert.equal(h.state().pin, undefined);
+  }
+});
+test('PIN polling stops on definitive errors, expiry and sign-out', async () => {
+  for (const scenario of ['invalid', 'expired', 'disconnect']) {
+    const h = await harness('');
+    h.respond(url => {
+      if (url.endsWith('pin/get')) return { pin: 'ABCD', check: 'check', expires_in: scenario === 'expired' ? -1 : 600, user_url: 'https://alldebrid.com/pin/?pin=ABCD' };
+      if (scenario === 'invalid') throw { statusCode: 400, text: JSON.stringify({ status: 'error', error: { code: 'PIN_INVALID' } }) };
+      throw new Error('Offline');
+    });
+    h.handlers.connect(); await tick();
+    await h.timers[0](); await tick();
+    if (scenario === 'disconnect') {
+      const retry = h.timers[1];
+      h.handlers.disconnect();
+      const calls = h.calls.length;
+      await retry(); await tick();
+      assert.equal(h.calls.length, calls);
+    } else assert.equal(h.timers.length, 1);
+    assert.equal(h.state().pin, undefined);
+    assert.equal(h.state().connected, false);
+  }
 });

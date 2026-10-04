@@ -65,7 +65,16 @@ async function request(path, data, key, get) {
     }
   } catch (error) {
     if (error && typeof error.text === 'string') response = error;
-    else throw new Error('Unable to connect to AllDebrid. Try again.');
+    else {
+      const failure = new Error('Unable to connect to AllDebrid. Try again.');
+      failure.retryable = true;
+      throw failure;
+    }
+  }
+  if (response.statusCode === 429 || response.statusCode >= 500) {
+    const failure = new Error('AllDebrid temporarily unavailable (HTTP ' + response.statusCode + ').');
+    failure.retryable = true;
+    throw failure;
   }
   let body;
   try { body = JSON.parse(response.text); }
@@ -165,9 +174,17 @@ async function play(id, token) {
     }
   }
   if (!/^https?:\/\//i.test(data.link || '')) throw new Error('Playback link unavailable. Try again later.');
-  const player = players.createPlayerInstance({ url: data.link, enablePlugins: true });
-  if (player === false) throw new Error('IINA could not open the playback link. Check the plugin network permissions.');
-  state.message = 'Playing ' + file.name;
+  // HTTP promises resume on NSURLSession's delegate queue. IINA timers run
+  // on the main thread, where AppKit must create the playback window.
+  await new Promise((resolve, reject) => setTimeout(() => {
+    if (!valid(token)) { resolve(); return; }
+    try {
+      const player = players.createPlayerInstance({ url: data.link, enablePlugins: true });
+      if (player === false) throw new Error('IINA could not open the playback link. Check the plugin network permissions.');
+      state.message = 'Playing ' + file.name;
+      resolve();
+    } catch (error) { reject(error); }
+  }, 0));
 }
 async function task(action) {
   if (busy) return;
@@ -200,7 +217,13 @@ async function connect(token) {
         saveKey(result.apikey); delete state.pin;
         task(refresh);
       } else pinTimer = setTimeout(poll, 5000);
-    } catch (error) { if (valid(token)) { delete state.pin; fail(error); } }
+    } catch (error) {
+      if (!valid(token)) return;
+      if (error.retryable && Date.now() < deadline) {
+        state.message = 'Connection interrupted. Retrying sign-in…'; send();
+        pinTimer = setTimeout(poll, 5000);
+      } else { delete state.pin; fail(error); }
+    }
   }
   pinTimer = setTimeout(poll, 5000);
 }
