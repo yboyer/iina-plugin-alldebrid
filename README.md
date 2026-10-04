@@ -21,7 +21,7 @@ Your account must allow access to magnets and link unlocking. A direct link is g
 
 Enter your TMDB **API key (v3)** in the library and click **Save**. Get a key from your [TMDB account settings](https://www.themoviedb.org/settings/api). Saving an empty key disables posters. The key is stored in plugin preferences, not in a secure keychain, and survives sign-out and restarts.
 
-A placeholder reserves the poster space while metadata and images load. The torrent name is shown below each video’s path and size. The first matching TMDB result with a poster is used, filtered by year when available. Filename parsing and matches may be imperfect. Results, including missing posters, are cached in memory; failed requests are retried on Refresh. TMDB errors do not block playback. Sign-out clears cached poster results.
+A placeholder reserves the poster space while metadata and images load. The first matching TMDB result with a poster is used, filtered by year when available. Filename parsing and matches may be imperfect. Results, including missing posters, are cached in memory; failed requests are retried on Refresh. TMDB errors do not block playback. Sign-out clears cached poster results.
 
 ## Data and privacy
 
