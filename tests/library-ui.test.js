@@ -16,6 +16,7 @@ function harness() {
   let receive;
   vm.runInNewContext(fs.readFileSync(require.resolve('../library-ui.js'), 'utf8'), {
     document: {
+      documentElement: { dataset: {} },
       getElementById(id) { if (!nodes.has(id)) nodes.set(id, new Node(id)); return nodes.get(id); },
       createElement: tag => new Node(tag)
     },
@@ -74,4 +75,15 @@ test('clear cache is available before sign-in and disabled during operations', (
   assert.equal(button.disabled, true);
   h.receive(library);
   assert.equal(button.disabled, false);
+});
+
+test('theme follows plugin state and switches immediately', () => {
+  const h = harness();
+  h.receive({ ...library, theme: 'dark' });
+  assert.equal(h.nodes.get('theme').value, 'dark');
+  h.nodes.get('theme').value = 'light';
+  h.nodes.get('theme').listeners.change();
+  assert.deepEqual(h.messages.at(-1), ['theme', 'light']);
+  h.receive({ ...library, theme: 'system' });
+  assert.equal(h.nodes.get('theme').value, 'system');
 });

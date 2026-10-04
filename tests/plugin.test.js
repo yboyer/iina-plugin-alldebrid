@@ -325,3 +325,23 @@ test('clear cache works before sign-in and ignores requests while busy', async (
   assert.equal(connected.state().busy, true);
   finish({ magnets: [] }); await tick();
 });
+
+test('theme preference persists across restart and sign-out, and rejects invalid values', async () => {
+  const storage = {};
+  const h = await harness('', storage);
+  h.handlers.ready();
+  assert.equal(h.state().theme, 'system');
+  h.handlers.theme('dark');
+  assert.equal(storage['library-theme'], 'dark');
+  h.handlers.disconnect();
+  assert.equal(h.state().theme, 'dark');
+  h.handlers.theme('invalid');
+  assert.equal(storage['library-theme'], 'dark');
+  const reopened = await harness('', storage);
+  reopened.handlers.ready();
+  assert.equal(reopened.state().theme, 'dark');
+  reopened.handlers.theme('light');
+  assert.equal(reopened.state().theme, 'light');
+  reopened.handlers.theme('system');
+  assert.equal(storage['library-theme'], 'system');
+});
