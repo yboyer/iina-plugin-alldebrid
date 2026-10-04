@@ -75,3 +75,17 @@ test('clear cache is available before sign-in and disabled during operations', (
   h.receive(library);
   assert.equal(button.disabled, false);
 });
+
+test('search ignores accents and combines words across magnet names and file metadata', () => {
+  const h = harness();
+  h.receive({ ...library, magnets: [{ ...library.magnets[0], name: 'Cinéma', files: [
+    { id: '1:0', name: 'Amélie.2001.mkv', path: 'Films/Amélie.2001.mkv', metadata: { title: 'Amélie', year: 2001, resolution: '1080P' } },
+    { id: '1:1', name: 'Autre.mkv', path: 'Films/Autre.mkv' }
+  ] }] });
+  h.nodes.get('search').value = '  CINEMA amelie 1080p ';
+  h.nodes.get('search').listeners.input();
+  const details = h.nodes.get('magnets').children[0];
+  assert.equal(details.children.length, 2);
+  assert.equal(details.children[1].children[0].textContent, 'Amélie');
+  assert.equal(details.children[1].children[0].children[0].textContent, '2001 · 1080P');
+});

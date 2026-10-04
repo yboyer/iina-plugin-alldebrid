@@ -345,3 +345,15 @@ test('incremental status merges partial changes, preserves files, deletes and re
   h.handlers.refresh(); await tick();
   assert.deepEqual(h.state().magnets, []);
 });
+
+test('filename metadata identifies movies and episodes while preserving unknown titles', () => {
+  const { metadata } = require('../library');
+  assert.deepEqual(metadata('Amélie.2001.1080p.MULTI.x265.BluRay.mkv'), {
+    year: 2001, resolution: '1080P', language: 'MULTI', codec: 'X265', source: 'BLURAY', title: 'Amélie'
+  });
+  assert.deepEqual(metadata('Série.S02E03.720p.VOSTFR.WEB-DL.mp4'), {
+    season: 2, episode: 3, resolution: '720P', language: 'VOSTFR', source: 'WEB-DL', title: 'Série'
+  });
+  assert.equal(metadata('Show.2x12.mkv').episode, 12);
+  assert.equal(metadata('Un titre inconnu.mkv').title, 'Un titre inconnu');
+});

@@ -15,6 +15,9 @@ function size(bytes) {
   const unit = bytes >= 1073741824 ? 1073741824 : 1048576;
   return (bytes / unit).toFixed(1) + (unit === 1073741824 ? ' GiB' : ' MiB');
 }
+function normalize(value) {
+  return String(value || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
 function render() {
   el('auth').hidden = state.connected;
   el('tools').hidden = !state.connected;
@@ -27,7 +30,7 @@ function render() {
   if (state.pin) { el('code').textContent = state.pin.code; el('pin-link').href = state.pin.url; }
   for (const button of playButtons) button.disabled = state.busy;
   if (emptyMessage) emptyMessage.hidden = state.busy;
-  const query = el('search').value.toLocaleLowerCase();
+  const query = normalize(el('search').value).trim();
   const renderKey = JSON.stringify([state.connected, state.libraryRevision, query, el('ready-only').checked]);
   if (renderKey === renderedKey) return;
   renderedKey = renderKey;
@@ -39,8 +42,12 @@ function render() {
   for (const magnet of state.magnets) {
     total += magnet.files.length;
     if (el('ready-only').checked && !magnet.ready) continue;
-    const matches = (magnet.name || '').toLocaleLowerCase().includes(query);
-    const files = magnet.files.filter(file => matches || file.path.toLocaleLowerCase().includes(query));
+    const words = query.split(/\s+/).filter(Boolean);
+    const matches = words.every(word => normalize(magnet.name).includes(word));
+    const files = magnet.files.filter(file => {
+      const searchable = normalize([magnet.name, file.path, ...Object.values(file.metadata || {})].join(' '));
+      return words.every(word => searchable.includes(word));
+    });
     if (!matches && !files.length) continue;
     shown++;
     const details = document.createElement('details');
@@ -56,7 +63,11 @@ function render() {
       else if (!files.length) details.append(text('p', magnet.ready ? 'No videos found in this magnet.' : 'Files will be available when the magnet is ready.'));
       for (const file of files) {
         const row = document.createElement('div'); row.className = 'file';
-        const info = text('div', file.name);
+        const meta = file.metadata || {};
+        const episode = meta.season !== undefined ? 'S' + String(meta.season).padStart(2, '0') + 'E' + String(meta.episode).padStart(2, '0') : '';
+        const labels = [episode, meta.year, meta.resolution, meta.language, meta.codec, meta.source].filter(Boolean);
+        const info = text('div', meta.title || file.name);
+        if (labels.length) info.append(text('small', labels.join(' · ')));
         info.append(text('small', file.path + ' · ' + size(file.size)));
         const button = text('button', 'Play'); button.disabled = state.busy;
         playButtons.push(button);

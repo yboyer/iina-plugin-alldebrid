@@ -1,5 +1,5 @@
 const { http, menu, standaloneWindow: view, utils, preferences, global: players } = iina;
-const { videos } = require('./library.js');
+const { videos, metadata } = require('./library.js');
 const API = 'https://api.alldebrid.com/';
 const CACHE_KEY = 'library-cache-v1';
 const CACHE_TTL = 24 * 60 * 60 * 1000;
@@ -36,7 +36,7 @@ function setFiles(magnet, files) {
   magnet.files = files.map((file, index) => {
     const id = magnet.id + ':' + index;
     filesById[id] = file;
-    return { id, name: file.name, path: file.path, size: file.size };
+    return { id, name: file.name, path: file.path, size: file.size, metadata: metadata(file.name) };
   });
 }
 let generation = 0;
