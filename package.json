@@ -16,7 +16,7 @@
     "@yboyer/config": "1.5.2",
     "@biomejs/biome": "2.5.15",
     "@types/node": "24.19.1",
-    "typescript": "6.0.3",
+    "typescript": "7.0.2",
     "vite": "8.3.3"
   },
   "engines": {
