@@ -17,6 +17,7 @@ const FILE_BATCH_SIZE = 500
 let statusSession = Math.floor(Math.random() * 2147483647) + 1
 let statusCounter = 0
 let statuses = new Map<string, Status>()
+let filesById: Record<string, Video> = {}
 let fileCache = new Map<string, { signature: string; files: Video[] }>()
 // Transfer statistics do not change the file tree. Unknown fields invalidate it.
 const TRANSFER_FIELDS = new Set([
@@ -44,7 +45,9 @@ let hiddenMedia = new Set<string>()
 try {
   const saved = JSON.parse(String(preferences.get('hidden-media') || '[]'))
   if (Array.isArray(saved)) hiddenMedia = new Set(saved.filter(value => typeof value === 'string'))
-} catch (_) {}
+} catch (_) {
+  // Ignore unreadable or invalid saved media; keep the empty set.
+}
 function mediaIdentity(magnetId: string, file: Video) {
   return JSON.stringify([magnetId, file.path, file.size])
 }
@@ -68,11 +71,12 @@ let generation = 0
 let busy = false
 const deletions = new Map<string, string>()
 let pinTimer: ReturnType<typeof setTimeout> | null = null
-let filesById: Record<string, Video> = {}
 let apiKey = ''
 try {
   apiKey = String(preferences.get('alldebrid-api-key') || '')
-} catch (_) {}
+} catch (_) {
+  // Keep the empty API key if preferences cannot be read.
+}
 let state: LibraryState = { connected: !!apiKey, busy: false, magnets: [], message: '' }
 let tmdbKey = ''
 let posterGeneration = 0
@@ -85,13 +89,17 @@ let posterCache = new Map<string, TmdbMatch>()
 let episodeCache = new Map<string, string | null>()
 try {
   tmdbKey = String(preferences.get('tmdb-api-key') || '')
-} catch (_) {}
+} catch (_) {
+  // Keep the empty TMDB key if preferences cannot be read.
+}
 let theme = 'system'
 try {
   const savedTheme = preferences.get('library-theme')
   if (typeof savedTheme === 'string' && ['system', 'light', 'dark'].includes(savedTheme))
     theme = savedTheme
-} catch (_) {}
+} catch (_) {
+  // Keep the system theme if preferences cannot be read.
+}
 function send() {
   view.postMessage('state', {
     ...state,
@@ -335,7 +343,7 @@ async function refresh(token: number) {
       if (magnet.ready) {
         const signature = fileSignature(m)
         const cached = fileCache.get(magnet.id)
-        if (cached && cached.signature === signature) {
+        if (cached?.signature === signature) {
           retained.set(magnet.id, cached)
           setFiles(magnet, cached.files)
         } else pending.push(magnet)

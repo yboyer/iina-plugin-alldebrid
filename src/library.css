@@ -126,7 +126,7 @@ a {
 [hidden] {
   display: none !important;
 }
-:root[data-theme="dark"] {
+:root[data-theme='dark'] {
   --background: #17191e;
   --foreground: #e7eaf0;
   --surface: #23262e;
@@ -138,7 +138,7 @@ a {
   color-scheme: dark;
 }
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]):not([data-theme="dark"]) {
+  :root:not([data-theme='light']):not([data-theme='dark']) {
     --background: #17191e;
     --foreground: #e7eaf0;
     --surface: #23262e;

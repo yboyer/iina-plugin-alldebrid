@@ -4,5 +4,5 @@
     "lib": ["ES2023", "DOM"],
     "allowImportingTsExtensions": true
   },
-  "include": ["./*.mts"]
+  "include": ["./*.ts"]
 }

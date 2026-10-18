@@ -50,13 +50,13 @@ export interface LibraryState {
   tmdbMessage?: string
 }
 export interface Status {
+  [key: string]: unknown
   deleted?: boolean
   filename: string
   id: string | number
   status?: string
   statusCode?: number | string
   uploadDate?: number | string
-  [key: string]: unknown
 }
 export interface ApiData {
   activated?: boolean
