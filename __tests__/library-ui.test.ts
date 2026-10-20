@@ -1,18 +1,31 @@
-const test = require('node:test')
-const assert = require('node:assert/strict')
-const fs = require('node:fs')
-const vm = require('node:vm')
+import assert from 'node:assert/strict'
+import fs from 'node:fs'
+import { createRequire } from 'node:module'
+import vm from 'node:vm'
+
+import { test } from 'vite-plus/test'
+
+const require = createRequire(import.meta.url)
 
 function harness() {
   class Node {
-    constructor(tag) {
+    tag: string
+    children: Node[] = []
+    listeners: Record<string, () => void> = {}
+    value = ''
+    checked = false
+    parent: Node | null = null
+    open = false
+    textContent = ''
+    disabled = false
+    hidden = false
+    loading = ''
+    className = ''
+
+    constructor(tag: string) {
       this.tag = tag
-      this.children = []
-      this.listeners = {}
-      this.value = ''
-      this.checked = false
     }
-    append(...children) {
+    append(...children: Node[]) {
       for (const node of children) {
         node.parent = this
         this.children.push(node)
@@ -24,46 +37,46 @@ function harness() {
         this.parent = null
       }
     }
-    insertBefore(node, reference) {
+    insertBefore(node: Node, reference: Node | null) {
       node.remove()
       const index = reference ? this.children.indexOf(reference) : this.children.length
       this.children.splice(index, 0, node)
       node.parent = this
     }
-    replaceChildren(...children) {
+    replaceChildren(...children: Node[]) {
       this.children = children
     }
-    addEventListener(name, callback) {
+    addEventListener(name: string, callback: () => void) {
       this.listeners[name] = callback
     }
-    contains(node) {
+    contains(node: Node): boolean {
       return this === node || this.children.some(child => child.contains(node))
     }
-    toggle(open) {
+    toggle(open: boolean) {
       this.open = open
       this.listeners.toggle()
     }
   }
-  const nodes = new Map()
-  const messages = []
-  let receive
+  const nodes = new Map<string, Node>()
+  const messages: unknown[][] = []
+  let receive!: (state: Record<string, unknown>) => void
   vm.runInNewContext(fs.readFileSync(require.resolve('../dist/plugin/library-ui.js'), 'utf8'), {
     document: {
       documentElement: { dataset: {} },
-      getElementById(id) {
+      getElementById(id: string) {
         if (!nodes.has(id)) nodes.set(id, new Node(id))
         return nodes.get(id)
       },
-      createElement: tag => new Node(tag),
+      createElement: (tag: string) => new Node(tag),
     },
     iina: {
-      onMessage: (_, callback) => {
+      onMessage: (_: string, callback: typeof receive) => {
         receive = callback
       },
-      postMessage: (...args) => messages.push(args),
+      postMessage: (...args: unknown[]) => messages.push(args),
     },
   })
-  return { nodes, messages, receive }
+  return { nodes, messages, receive, Node }
 }
 const library = {
   connected: true,
@@ -82,15 +95,15 @@ const library = {
 test('videos render directly without torrent name below path and preserve rows across busy changes', () => {
   const h = harness()
   h.receive(library)
-  const row = h.nodes.get('magnets').children[0]
+  const row = h.nodes.get('magnets')!.children[0]
   const button = row.children[1]
   assert.equal(row.tag, 'article')
   assert.equal(row.children[0].children[0].textContent, 'Season/Episode.mkv · 0.0 MiB')
   assert.equal(row.children[0].children.length, 1)
   button.listeners.click()
-  assert.deepEqual(h.messages.at(-1), ['play', '1:0'])
+  assert.deepEqual(h.messages.at(-1)!, ['play', '1:0'])
   h.receive({ ...library, busy: true })
-  assert.equal(h.nodes.get('magnets').children[0], row)
+  assert.equal(h.nodes.get('magnets')!.children[0], row)
   assert.equal(button.disabled, true)
   h.receive(library)
   assert.equal(button.disabled, false)
@@ -98,27 +111,27 @@ test('videos render directly without torrent name below path and preserve rows a
 test('search shows matching paths directly and empty states follow busy', () => {
   const h = harness()
   h.receive(library)
-  h.nodes.get('search').value = 'season'
-  h.nodes.get('search').listeners.input()
-  assert.equal(h.nodes.get('magnets').children.length, 1)
-  assert.equal(h.nodes.get('magnets').children[0].children[0].textContent, 'Episode')
+  h.nodes.get('search')!.value = 'season'
+  h.nodes.get('search')!.listeners.input()
+  assert.equal(h.nodes.get('magnets')!.children.length, 1)
+  assert.equal(h.nodes.get('magnets')!.children[0].children[0].textContent, 'Episode')
   h.receive({ connected: true, busy: true, libraryRevision: 3, magnets: [] })
-  const empty = h.nodes.get('magnets').children[0]
+  const empty = h.nodes.get('magnets')!.children[0]
   assert.equal(empty.hidden, true)
   h.receive({ connected: true, busy: false, libraryRevision: 3, magnets: [] })
-  assert.equal(h.nodes.get('magnets').children[0], empty)
+  assert.equal(h.nodes.get('magnets')!.children[0], empty)
   assert.equal(empty.hidden, false)
 })
 
 test('theme follows plugin state and switches immediately', () => {
   const h = harness()
   h.receive({ ...library, theme: 'dark' })
-  assert.equal(h.nodes.get('theme').value, 'dark')
-  h.nodes.get('theme').value = 'light'
-  h.nodes.get('theme').listeners.change()
-  assert.deepEqual(h.messages.at(-1), ['theme', 'light'])
+  assert.equal(h.nodes.get('theme')!.value, 'dark')
+  h.nodes.get('theme')!.value = 'light'
+  h.nodes.get('theme')!.listeners.change()
+  assert.deepEqual(h.messages.at(-1)!, ['theme', 'light'])
   h.receive({ ...library, theme: 'system' })
-  assert.equal(h.nodes.get('theme').value, 'system')
+  assert.equal(h.nodes.get('theme')!.value, 'system')
 })
 
 test('search ignores accents and combines words across magnet names and file metadata', () => {
@@ -141,20 +154,21 @@ test('search ignores accents and combines words across magnet names and file met
       },
     ],
   })
-  h.nodes.get('search').value = '  CINEMA amelie 1080p '
-  h.nodes.get('search').listeners.input()
-  assert.equal(h.nodes.get('magnets').children.length, 1)
-  const row = h.nodes.get('magnets').children[0]
+  h.nodes.get('search')!.value = '  CINEMA amelie 1080p '
+  h.nodes.get('search')!.listeners.input()
+  assert.equal(h.nodes.get('magnets')!.children.length, 1)
+  const row = h.nodes.get('magnets')!.children[0]
   assert.equal(row.children[0].textContent, 'Amélie')
   assert.equal(row.children[0].children[0].textContent, '2001 · 1080P')
 })
 
 test('TMDB settings clear submitted key and posters load lazily with failure fallback', () => {
   const h = harness()
-  h.nodes.set('tmdb-key', { value: 'key' })
-  h.nodes.get('tmdb-save').listeners.click()
-  assert.deepEqual(h.messages.at(-1), ['tmdb-key', 'key'])
-  assert.equal(h.nodes.get('tmdb-key').value, '')
+  h.nodes.set('tmdb-key', new h.Node('input'))
+  h.nodes.get('tmdb-key')!.value = 'key'
+  h.nodes.get('tmdb-save')!.listeners.click()
+  assert.deepEqual(h.messages.at(-1)!, ['tmdb-key', 'key'])
+  assert.equal(h.nodes.get('tmdb-key')!.value, '')
   h.receive({
     ...library,
     tmdbConfigured: true,
@@ -167,7 +181,7 @@ test('TMDB settings clear submitted key and posters load lazily with failure fal
       },
     ],
   })
-  const slot = h.nodes.get('magnets').children[0].children[2]
+  const slot = h.nodes.get('magnets')!.children[0].children[2]
   const placeholder = slot.children[0]
   const poster = slot.children[1]
   assert.equal(placeholder.textContent, 'Loading poster…')
@@ -190,7 +204,7 @@ test('missing posters retain a placeholder for movies and episodes with or witho
         tmdbConfigured,
         magnets: [{ ...library.magnets[0], files: [{ ...library.magnets[0].files[0], metadata }] }],
       })
-      const slot = h.nodes.get('magnets').children[0].children[2]
+      const slot = h.nodes.get('magnets')!.children[0].children[2]
       assert.equal(slot.className, 'poster-slot')
       assert.equal(slot.children.length, 1)
       assert.equal(slot.children[0].textContent, 'No poster')
@@ -207,14 +221,14 @@ test('poster lookup has a placeholder and unavailable magnets retain status with
       { ...library.magnets[0], files: [{ ...library.magnets[0].files[0], posterPending: true }] },
     ],
   })
-  const slot = h.nodes.get('magnets').children[0].children[2]
+  const slot = h.nodes.get('magnets')!.children[0].children[2]
   assert.equal(slot.children[0].textContent, 'Loading poster…')
   h.receive({
     ...library,
     libraryRevision: 2,
     magnets: [{ id: '2', name: 'Pending torrent', ready: false, status: 'Downloading', files: [] }],
   })
-  const notice = h.nodes.get('magnets').children[0]
+  const notice = h.nodes.get('magnets')!.children[0]
   assert.equal(notice.tag, 'section')
   assert.equal(notice.children[0].textContent, 'Pending torrent')
   assert.equal(notice.children[1].textContent, 'Downloading')
@@ -223,11 +237,11 @@ test('poster lookup has a placeholder and unavailable magnets retain status with
 test('delete targets the individual video and follows busy state', () => {
   const h = harness()
   h.receive(library)
-  const row = h.nodes.get('magnets').children[0]
-  const button = row.children.at(-1)
+  const row = h.nodes.get('magnets')!.children[0]
+  const button = row.children.at(-1)!
   assert.equal(button.textContent, 'Delete')
   button.listeners.click()
-  assert.deepEqual(h.messages.at(-1), ['delete-media', '1:0'])
+  assert.deepEqual(h.messages.at(-1)!, ['delete-media', '1:0'])
   h.receive({ ...library, busy: true })
   assert.equal(button.disabled, true)
   h.receive(library)
@@ -251,18 +265,18 @@ test('pending deletion leaves other magnets usable and removal preserves their r
     ],
   }
   h.receive({ ...library, magnets: [first, second] })
-  const container = h.nodes.get('magnets')
+  const container = h.nodes.get('magnets')!
   const original = container.children[1]
   const poster = original.children[2].children[1]
   h.receive({ ...library, magnets: [first, second], deleting: ['1:0'], deletingMagnets: ['1'] })
-  assert.equal(container.children[0].children.at(-1).textContent, 'Deleting…')
+  assert.equal(container.children[0].children.at(-1)!.textContent, 'Deleting…')
   assert.equal(original.children[1].disabled, false)
-  assert.equal(original.children.at(-1).disabled, false)
+  assert.equal(original.children.at(-1)!.disabled, false)
   h.receive({ ...library, libraryRevision: 2, magnets: [second] })
   assert.equal(container.children.length, 1)
   assert.equal(container.children[0], original)
   assert.equal(original.children[2].children[1], poster)
-  assert.equal(h.nodes.get('count').textContent, '1 / 1 magnets · 1 video(s)')
+  assert.equal(h.nodes.get('count')!.textContent, '1 / 1 magnets · 1 video(s)')
 })
 test('deleting the only search result updates the empty state without losing other files', () => {
   const h = harness()
@@ -270,11 +284,11 @@ test('deleting the only search result updates the empty state without losing oth
     ...library.magnets[0],
     files: [library.magnets[0].files[0], { id: '1:1', name: 'Movie', path: 'Movie.mkv' }],
   }
-  h.nodes.get('search').value = 'episode'
+  h.nodes.get('search')!.value = 'episode'
   h.receive({ ...library, magnets: [magnet] })
   h.receive({ ...library, libraryRevision: 2, magnets: [{ ...magnet, files: [magnet.files[1]] }] })
-  assert.equal(h.nodes.get('magnets').children[0].textContent, 'No results.')
-  assert.equal(h.nodes.get('count').textContent, '0 / 1 magnets · 1 video(s)')
+  assert.equal(h.nodes.get('magnets')!.children[0].textContent, 'No results.')
+  assert.equal(h.nodes.get('count')!.textContent, '0 / 1 magnets · 1 video(s)')
 })
 
 test('TMDB titles and episode names render and are searchable', () => {
@@ -296,12 +310,12 @@ test('TMDB titles and episode names render and are searchable', () => {
     ],
   }
   h.receive(state)
-  const info = h.nodes.get('magnets').children[0].children[0]
+  const info = h.nodes.get('magnets')!.children[0].children[0]
   assert.equal(info.textContent, 'La Série — Le retour')
   assert.equal(info.children[0].textContent, 'S03E07')
-  h.nodes.get('search').value = 'série retour'
-  h.nodes.get('search').listeners.input()
-  assert.equal(h.nodes.get('magnets').children.length, 1)
+  h.nodes.get('search')!.value = 'série retour'
+  h.nodes.get('search')!.listeners.input()
+  assert.equal(h.nodes.get('magnets')!.children.length, 1)
 })
 
 test('season-only metadata renders without an undefined episode number', () => {
@@ -320,6 +334,6 @@ test('season-only metadata renders without an undefined episode number', () => {
       },
     ],
   })
-  const info = h.nodes.get('magnets').children[0].children[0]
+  const info = h.nodes.get('magnets')!.children[0].children[0]
   assert.equal(info.children[0].textContent, 'S02')
 })

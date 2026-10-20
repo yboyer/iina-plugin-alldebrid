@@ -1,21 +1,41 @@
-const test = require('node:test')
-const assert = require('node:assert/strict')
-const fs = require('node:fs')
-const vm = require('node:vm')
+import assert from 'node:assert/strict'
+import fs from 'node:fs'
+import { createRequire } from 'node:module'
+import vm from 'node:vm'
+
+import { test } from 'vite-plus/test'
+
+import type { LibraryState } from '../src/types'
+
+const require = createRequire(import.meta.url)
 const { videos } = require('../dist/plugin/library.js')
-const tick = () => new Promise(resolve => setImmediate(resolve))
-async function harness(key = 'secret', initialResponse = () => ({ magnets: [] }), storage = {}) {
-  const handlers = {}
-  const calls = []
-  const opened = []
-  const timers = []
-  let lastState
+const tick = () => new Promise<void>(resolve => setImmediate(resolve))
+
+type ResponseBody = Record<string, unknown>
+interface RequestOptions {
+  data: Record<string, string | number>
+  headers: Record<string, string>
+}
+type Responder = (url: string, options: RequestOptions) => ResponseBody | Promise<ResponseBody>
+type Timer = () => void | Promise<void>
+type TestState = LibraryState & { message: string; tmdbMessage: string }
+
+async function harness(
+  key = 'secret',
+  initialResponse: Responder = () => ({ magnets: [] }),
+  storage: Record<string, unknown> = {}
+) {
+  const handlers: Record<string, (value?: string) => void> = {}
+  const calls: { url: string; options: RequestOptions }[] = []
+  const opened: { url: string }[] = []
+  const timers: (Timer | null)[] = []
+  let lastState!: TestState
   let onMainThread = false
   let deferPlayback = false
-  const playbackTimers = []
-  let bootCalls = []
-  let response = () => ({ magnets: [] })
-  const request = async (url, options) => {
+  const playbackTimers: Timer[] = []
+  let bootCalls: typeof calls = []
+  let response: Responder = () => ({ magnets: [] })
+  const request = async (url: string, options: RequestOptions) => {
     calls.push({ url, options })
     const body = await response(url, options)
     return {
@@ -26,15 +46,15 @@ async function harness(key = 'secret', initialResponse = () => ({ magnets: [] })
     }
   }
   const context = {
-    require: name => {
+    require: (name: string) => {
       throw new Error(`IINA entry must be self-contained: ${name}`)
     },
-    setTimeout: (callback, delay) => {
+    setTimeout: (callback: Timer, delay: number) => {
       if (delay === 0) {
         const run = () => {
           onMainThread = true
           try {
-            callback()
+            void callback()
           } finally {
             onMainThread = false
           }
@@ -44,40 +64,40 @@ async function harness(key = 'secret', initialResponse = () => ({ magnets: [] })
         return 0
       }
       if (delay === 150) {
-        callback()
+        void callback()
         return 0
       }
       timers.push(callback)
       return timers.length
     },
-    clearTimeout: id => {
+    clearTimeout: (id: number) => {
       timers[id - 1] = null
     },
     iina: {
       http: { get: request, post: request },
       preferences: {
-        get: name => storage[name],
-        set: (name, value) => {
+        get: (name: string) => storage[name],
+        set: (name: string, value: unknown) => {
           storage[name] = value
         },
         sync() {},
       },
-      menu: { item: (_name, fn) => fn, addItem() {} },
+      menu: { item: (_name: string, fn: () => void) => fn, addItem() {} },
       standaloneWindow: {
         setProperty() {},
         setFrame() {},
         loadFile() {},
         open() {},
-        onMessage: (name, fn) => {
+        onMessage: (name: string, fn: (value?: string) => void) => {
           handlers[name] = fn
         },
-        postMessage: (_, state) => {
+        postMessage: (_: string, state: TestState) => {
           lastState = JSON.parse(JSON.stringify(state))
         },
       },
       utils: { open() {} },
       global: {
-        createPlayerInstance: options => {
+        createPlayerInstance: (options: { url: string }): number | boolean => {
           assert.equal(
             onMainThread,
             true,
@@ -98,7 +118,7 @@ async function harness(key = 'secret', initialResponse = () => ({ magnets: [] })
     }
     handlers.connect()
     await tick()
-    await timers.shift()()
+    await timers.shift()!()
     await tick()
     bootCalls = calls.slice()
     calls.length = 0
@@ -117,7 +137,7 @@ async function harness(key = 'secret', initialResponse = () => ({ magnets: [] })
       context.iina.global.createPlayerInstance = () => false
     },
     state: () => lastState,
-    respond: fn => {
+    respond: (fn: Responder) => {
       response = fn
     },
   }
@@ -165,14 +185,14 @@ test('loads all magnets, requests ready files and unlocks before playback', asyn
   assert.equal(h.calls.length, 2)
   assert.equal(h.calls[1].options.data['id[0]'], '1')
   assert.equal(h.calls[0].options.headers.Authorization, 'Bearer secret')
-  assert.equal(h.state().magnets[0].files[0].link, undefined)
+  assert.equal(Reflect.get(h.state().magnets[0].files[0], 'link'), undefined)
   h.handlers.play('1:0')
   await tick()
   assert.equal(h.opened[0].url, 'https://cdn.example/film.mp4')
   assert.equal(h.calls[2].options.data.link, 'https://alldebrid.com/f/a')
 })
 test('PIN authentication saves the key and refreshes the account', async () => {
-  const storage = {}
+  const storage: Record<string, unknown> = {}
   const h = await harness('', undefined, storage)
   h.respond(url => {
     if (url.endsWith('pin/get'))
@@ -187,20 +207,20 @@ test('PIN authentication saves the key and refreshes the account', async () => {
   })
   h.handlers.connect()
   await tick()
-  assert.equal(h.state().pin.code, 'ABCD')
-  await h.timers.shift()()
+  assert.equal(h.state().pin!.code, 'ABCD')
+  await h.timers.shift()!()
   await tick()
-  assert.equal(h.calls.at(-1).options.headers.Authorization, 'Bearer new-secret')
+  assert.equal(h.calls.at(-1)!.options.headers.Authorization, 'Bearer new-secret')
   assert.equal(h.state().connected, true)
   assert.equal(h.state().pin, undefined)
   assert.equal(storage['alldebrid-api-key'], 'new-secret')
 })
 test('disconnect prevents an in-flight response from restoring private library', async () => {
   const h = await harness()
-  let finish
+  let finish!: (body: ResponseBody) => void
   h.respond(
     () =>
-      new Promise(resolve => {
+      new Promise<ResponseBody>(resolve => {
         finish = resolve
       })
   )
@@ -248,7 +268,7 @@ test('delayed links wait for readiness before opening', async () => {
   h.handlers.play('1:0')
   await tick()
   assert.equal(h.opened.length, 0)
-  h.timers.shift()()
+  void h.timers.shift()!()
   await tick()
   assert.equal(h.opened[0].url, 'https://cdn.example/ready.mp4')
 })
@@ -261,7 +281,7 @@ test('starts signed out when no AllDebrid key is saved', async () => {
 })
 
 test('restores the saved AllDebrid key after restart and clears it on sign-out', async () => {
-  const storage = {}
+  const storage: Record<string, unknown> = {}
   await harness('saved-secret', undefined, storage)
   const h = await harness('', undefined, storage)
   h.handlers.ready()
@@ -296,7 +316,7 @@ test('a refused player creation reports failure and releases the controls', asyn
   assert.equal(h.state().busy, false)
 })
 
-function libraryResponse(magnets) {
+function libraryResponse(magnets: ResponseBody[]): Responder {
   return (url, options) => {
     if (url.endsWith('magnet/status')) return { magnets }
     if (url.endsWith('magnet/files'))
@@ -335,7 +355,7 @@ test('unchanged magnets retain files and playback source links', async () => {
   assert.equal(h.state().magnets[0].files[0].name, 'film.mp4')
   h.handlers.play('1:0')
   await tick()
-  assert.equal(h.calls.at(-1).options.data.link, 'https://alldebrid.com/f/1')
+  assert.equal(h.calls.at(-1)!.options.data.link, 'https://alldebrid.com/f/1')
 })
 test('refresh retries only failed batches', async () => {
   const h = await harness()
@@ -362,11 +382,11 @@ test('refresh retries only failed batches', async () => {
 })
 test('sign-out ignores pending file responses', async () => {
   const h = await harness()
-  let finish
+  let finish!: (body: ResponseBody) => void
   h.respond(url =>
     url.endsWith('magnet/status')
       ? { magnets: [{ id: 1, statusCode: 4 }] }
-      : new Promise(resolve => {
+      : new Promise<ResponseBody>(resolve => {
           finish = resolve
         })
   )
@@ -390,7 +410,7 @@ test('disconnect cancels playback queued for the main thread', async () => {
   assert.equal(h.opened.length, 0)
   assert.equal(h.state().busy, true)
   h.handlers.disconnect()
-  h.playbackTimers.shift()()
+  void h.playbackTimers.shift()!()
   await tick()
   assert.equal(h.opened.length, 0)
   assert.equal(h.state().connected, false)
@@ -422,11 +442,11 @@ test('PIN polling retries transient failures and completes authentication', asyn
     })
     h.handlers.connect()
     await tick()
-    await h.timers[0]()
+    await h.timers[0]!()
     await tick()
-    assert.equal(h.state().pin.code, 'ABCD')
+    assert.equal(h.state().pin!.code, 'ABCD')
     assert.match(h.state().message, /Retrying/)
-    await h.timers[1]()
+    await h.timers[1]!()
     await tick()
     assert.equal(h.state().connected, true)
     assert.equal(h.state().pin, undefined)
@@ -453,10 +473,10 @@ test('PIN polling stops on definitive errors, expiry and sign-out', async () => 
     })
     h.handlers.connect()
     await tick()
-    await h.timers[0]()
+    await h.timers[0]!()
     await tick()
     if (scenario === 'disconnect') {
-      const retry = h.timers[1]
+      const retry = h.timers[1]!
       h.handlers.disconnect()
       const calls = h.calls.length
       await retry()
@@ -469,7 +489,7 @@ test('PIN polling stops on definitive errors, expiry and sign-out', async () => 
 })
 
 test('theme preference persists across restart and sign-out, and rejects invalid values', async () => {
-  const storage = {}
+  const storage: Record<string, unknown> = {}
   const h = await harness('', undefined, storage)
   h.handlers.ready()
   assert.equal(h.state().theme, 'system')
@@ -501,7 +521,7 @@ test('incremental status merges partial changes, preserves files, deletes and re
         }
       : libraryResponse([])(url, options)
   )
-  const session = h.bootCalls.find(call => call.url.endsWith('magnet/status')).options.data.session
+  const session = h.bootCalls.find(call => call.url.endsWith('magnet/status'))!.options.data.session
   h.respond((url, options) =>
     url.endsWith('magnet/status')
       ? { counter: 2, magnets: [{ id: 2, downloaded: 42 }] }
@@ -552,9 +572,9 @@ test('filename metadata identifies movies and episodes while preserving unknown 
 
 test('cache follows file changes, readiness, deletion and full snapshots', async () => {
   const h = await harness()
-  let magnets = [{ id: 1, filename: 'Film', statusCode: 4, size: 10 }]
+  let magnets: ResponseBody[] = [{ id: 1, filename: 'Film', statusCode: 4, size: 10 }]
   h.respond((url, options) => libraryResponse(magnets)(url, options))
-  const refresh = async expected => {
+  const refresh = async (expected: number) => {
     h.calls.length = 0
     h.handlers.refresh()
     await tick()
@@ -582,7 +602,7 @@ test('cache follows file changes, readiness, deletion and full snapshots', async
   assert.equal(h.state().magnets.length, 0)
 })
 
-const tmdbLibrary = url =>
+const tmdbLibrary = (url: string) =>
   url.endsWith('magnet/status')
     ? { magnets: [{ id: 1, filename: 'Movies', statusCode: 4 }] }
     : {
@@ -598,7 +618,7 @@ const tmdbLibrary = url =>
         ],
       }
 test('TMDB stores key, searches title/year, caches duplicates, and enriches episodes', async () => {
-  const storage = {}
+  const storage: Record<string, unknown> = {}
   const h = await harness('secret', tmdbLibrary, storage)
   h.respond(url => {
     if (url.includes('/search/tv'))
@@ -627,7 +647,7 @@ test('TMDB stores key, searches title/year, caches duplicates, and enriches epis
   assert.equal(h.state().magnets[0].files[2].episodeTitle, 'Le commencement')
   assert.equal(h.calls.filter(call => call.url.includes('/search/tv')).length, 1)
   assert.match(
-    h.calls.find(call => call.url.includes('/season/')).url,
+    h.calls.find(call => call.url.includes('/season/'))!.url,
     /tv\/42\/season\/1\/episode\/1\?/
   )
   assert.equal(JSON.stringify(h.state()).includes('tmdb-secret'), false)
@@ -667,7 +687,7 @@ test('TMDB failures retry on refresh, missing posters are cached, and playback r
   assert.equal(h.calls.slice(count).filter(call => call.url.includes('/search/movie')).length, 0)
 })
 test('TMDB shares series results and retries episode failures without losing the series poster', async () => {
-  const seriesLibrary = url =>
+  const seriesLibrary = (url: string) =>
     url.endsWith('magnet/status')
       ? { magnets: [{ id: 1, filename: 'Series', statusCode: 4 }] }
       : {
@@ -734,10 +754,10 @@ test('TMDB uses the first movie title even without a poster', async () => {
 test('pending TMDB responses are ignored after sign-out and key replacement', async () => {
   for (const action of ['disconnect', 'replace']) {
     const h = await harness('secret', tmdbLibrary)
-    let resolve
+    let resolve!: (body: ResponseBody) => void
     h.respond(
       () =>
-        new Promise(done => {
+        new Promise<ResponseBody>(done => {
           resolve = done
         })
     )
@@ -753,7 +773,7 @@ test('pending TMDB responses are ignored after sign-out and key replacement', as
   }
 })
 
-const deletionLibrary = url =>
+const deletionLibrary = (url: string) =>
   url.endsWith('magnet/status')
     ? { magnets: [{ id: 1, filename: 'Two videos', statusCode: 4 }] }
     : {
@@ -768,7 +788,7 @@ const deletionLibrary = url =>
         ],
       }
 test('media deletion persists across refresh and restart and deletes the magnet only for the last video', async () => {
-  const storage = {}
+  const storage: Record<string, unknown> = {}
   const h = await harness('secret', deletionLibrary, storage)
   h.respond(deletionLibrary)
   h.handlers['delete-media']('1:0')
@@ -813,10 +833,10 @@ test('failed last-media deletion preserves the video and disconnect ignores a pe
   assert.equal(h.state().magnets[0].files[0].id, '1:1')
   assert.equal(h.state().busy, false)
   assert.match(h.state().message, /Unable to connect/)
-  let finish
+  let finish!: (body: ResponseBody) => void
   h.respond(
     () =>
-      new Promise(resolve => {
+      new Promise<ResponseBody>(resolve => {
         finish = resolve
       })
   )
@@ -830,7 +850,7 @@ test('failed last-media deletion preserves the video and disconnect ignores a pe
 })
 
 test('pending deletion is scoped to a magnet, rejects duplicates and allows other playback', async () => {
-  const listing = url =>
+  const listing = (url: string) =>
     url.endsWith('magnet/status')
       ? {
           magnets: [
@@ -845,10 +865,10 @@ test('pending deletion is scoped to a magnet, rejects duplicates and allows othe
           ],
         }
   const h = await harness('secret', listing)
-  let finish
+  let finish!: (body: ResponseBody) => void
   h.respond(url =>
     url.endsWith('magnet/delete')
-      ? new Promise(resolve => {
+      ? new Promise<ResponseBody>(resolve => {
           finish = resolve
         })
       : { link: 'https://cdn.example/two.mkv' }

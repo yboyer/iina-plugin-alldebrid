@@ -45,11 +45,12 @@ Matches use information parsed from filenames and may be imperfect. Titles are r
 
 ## Development
 
+The toolchain uses [Vite+](https://viteplus.dev/) for builds, linting, and formatting.
 TypeScript sources live in `src/`; build output goes to `dist/plugin`.
+Tests use Vitest through Vite+ and build the plugin before running.
 
 ```sh
-npm run lint       # Check code and formatting
-npm run typecheck  # Validate TypeScript
+npm run lint       # Check code, formatting, and TypeScript with Vite+
 npm test           # Build and run unit and regression tests
 npm run pack       # Build and create the plugin archive
 ```

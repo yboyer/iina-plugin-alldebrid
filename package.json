@@ -2,26 +2,28 @@
   "name": "iina-alldebrid",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "scripts": {
-    "typecheck": "tsc --noEmit && tsc --noEmit -p tests",
-    "lint": "biome check .",
-    "build": "npm run typecheck && vite build && vite build --mode main && vite build --mode library && vite build --mode ui && node scripts/assets.mjs",
-    "test": "npm run build && node --test tests/*.test.mts tests/*.test.cjs",
-    "pack": "npm run build && python3 scripts/pack.py"
+    "lint": "vp check",
+    "build": "vp pack && node scripts/assets.mjs",
+    "test": "vp run build && vp test",
+    "pack": "npm run build && python3 scripts/pack.py",
+    "prepare": "vp config"
   },
   "dependencies": {
     "parse-torrent-title": "3.0.1"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.5.15",
     "@tsconfig/node24": "24.0.5",
     "@types/node": "24.19.2",
-    "@yboyer/config": "1.5.2",
-    "typescript": "7.0.2",
-    "vite": "8.3.4"
+    "@yboyer/config": "2.1.2",
+    "vite": "npm:@voidzero-dev/vite-plus-core@1.2.0",
+    "vite-plus": "1.2.0"
+  },
+  "overrides": {
+    "vite": "npm:@voidzero-dev/vite-plus-core@1.2.0"
   },
   "engines": {
-    "node": ">=24.0.0"
-  },
-  "type": "module"
+    "node": ">=24.11.0"
+  }
 }

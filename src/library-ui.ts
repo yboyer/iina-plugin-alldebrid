@@ -132,7 +132,7 @@ function render() {
     for (const file of files) {
       const signature = JSON.stringify([file, magnet.name, state.tmdbConfigured])
       const cached = renderedRows.get(file.id)
-      if (cached && cached.signature === signature) {
+      if (cached?.signature === signature) {
         nextRows.set(file.id, cached)
         for (const button of cached.buttons) {
           updateButton(button)
