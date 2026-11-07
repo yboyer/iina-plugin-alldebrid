@@ -1,13 +1,12 @@
 {
-  "extends": "@tsconfig/node24/tsconfig.json",
+  "extends": "@tsconfig/node26/tsconfig.json",
   "compilerOptions": {
     "target": "ES2020",
     "module": "ESNext",
     "moduleResolution": "Bundler",
     "lib": ["ES2020", "DOM"],
     "noEmit": true,
-    "types": ["node"],
-    "rootDir": "."
+    "strict": true
   },
   "include": ["src", "vite.config.ts"]
 }
