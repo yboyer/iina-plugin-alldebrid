@@ -3,7 +3,7 @@ import fs from 'node:fs'
 import { createRequire } from 'node:module'
 import vm from 'node:vm'
 
-import { test } from 'vite-plus/test'
+import { test } from 'vitest'
 
 const require = createRequire(import.meta.url)
 

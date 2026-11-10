@@ -4,25 +4,21 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "lint": "vp check",
-    "build": "vp pack && node scripts/assets.mjs",
-    "test": "vp run build && vp test",
-    "pack": "npm run build && python3 scripts/pack.py",
-    "prepare": "vp config"
+    "lint": "biome check --error-on-warnings . && tsc --noEmit && tsc --noEmit -p __tests__/tsconfig.json",
+    "build": "tsdown && node scripts/assets.mjs",
+    "test": "npm run build && vitest run",
+    "pack": "npm run build && python3 scripts/pack.py"
   },
   "dependencies": {
     "parse-torrent-title": "3.0.1"
   },
   "devDependencies": {
+    "@biomejs/biome": "2.6.4",
     "@tsconfig/node26": "26.0.1",
     "@types/node": "26.6.6",
     "@yboyer/config": "2.2.0",
-    "vite-plus": "1.5.0"
-  },
-  "overrides": {
-    "vite": "npm:@voidzero-dev/vite-plus-core@1.5.0"
-  },
-  "engines": {
-    "node": ">=24.11.0"
+    "tsdown": "0.23.5",
+    "typescript": "7.0.2",
+    "vitest": "5.1.0"
   }
 }

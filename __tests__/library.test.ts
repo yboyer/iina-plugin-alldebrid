@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 
-import { test } from 'vite-plus/test'
+import { test } from 'vitest'
 
 import { metadata, videos } from '../src/library.ts'
 
