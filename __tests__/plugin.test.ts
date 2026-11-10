@@ -3,7 +3,7 @@ import fs from 'node:fs'
 import { createRequire } from 'node:module'
 import vm from 'node:vm'
 
-import { test } from 'vite-plus/test'
+import { test } from 'vitest'
 
 import type { LibraryState } from '../src/types'
 
@@ -464,7 +464,6 @@ test('PIN polling stops on definitive errors, expiry and sign-out', async () => 
           user_url: 'https://alldebrid.com/pin/?pin=ABCD',
         }
       if (scenario === 'invalid')
-        // biome-ignore lint/style/useThrowOnlyError: IINA rejects HTTP requests with response objects.
         throw {
           statusCode: 400,
           text: JSON.stringify({ status: 'error', error: { code: 'PIN_INVALID' } }),
