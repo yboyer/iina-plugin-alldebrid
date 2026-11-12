@@ -18,8 +18,8 @@
       "@semantic-release/github",
       {
         "assets": ["dist/alldebrid.iinaplgz"],
-        "failComment": false,
-        "successComment": false,
+        "failCommentCondition": false,
+        "successCommentCondition": false,
         "releasedLabels": false
       }
     ]
