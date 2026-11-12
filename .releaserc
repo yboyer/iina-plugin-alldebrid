@@ -19,7 +19,7 @@
       {
         "assets": ["dist/alldebrid.iinaplgz"],
         "failCommentCondition": false,
-        "successComment": false,
+        "successCommentCondition": false,
         "releasedLabels": false
       }
     ]
