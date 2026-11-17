@@ -45,15 +45,11 @@ Matches use information parsed from filenames and may be imperfect. Titles are r
 
 ## Development
 
-The toolchain uses standalone [tsdown](https://tsdown.dev/) for builds,
-[Biome](https://biomejs.dev/) for formatting and linting, TypeScript for type checks,
-and [Vitest](https://vitest.dev/) for tests. Use npm with the committed `package-lock.json`
-and the Node.js version in `.node-version`.
-TypeScript sources live in `src/`; build output goes to `dist/plugin`.
-Tests build the plugin before running. The build keeps three independent CommonJS
-bundles (`global.js`, `main.js`, `library.js`) and one IIFE bundle (`library-ui.js`,
-configured global name `AllDebridUI`), targeting Safari 14. `parse-torrent-title` is bundled.
-Asset copying and plugin archive creation use the existing scripts.
+Use npm and the Node.js version in `.node-version`.
+The toolchain uses [tsdown](https://tsdown.dev/), [Biome](https://biomejs.dev/),
+TypeScript, and [Vitest](https://vitest.dev/).
+Sources are in `src/`; builds are written to `dist/plugin` as four independent IINA bundles.
+Tests build the plugin before running.
 
 ```sh
 npm run lint       # Check Biome rules, formatting, and source/test types
@@ -67,23 +63,6 @@ On macOS, link the built plugin for development and rebuild after changes:
 /Applications/IINA.app/Contents/MacOS/iina-plugin link dist/plugin
 ```
 
-`npm ci` does not install Git hooks. Run the checks explicitly before sharing changes.
-The pull request and release workflows run `npm ci`, `npm run lint`, and `npm test`.
-
-Biome extends the published `@yboyer/config/biome.json` from the pinned package version.
-It does not depend on unpublished changes in the config repository. The local overrides
-keep IINA globals, declaration-file imports, HTTP response objects thrown by tests,
-built-bundle imports in tests, assertions inside the test harness, and the `[hidden]`
-CSS rule. Biome sorts index signatures after named interface members and spaces YAML
-flow lists differently from the previous formatter. CSS keeps single quotes.
-Biome and Oxlint do not have identical rules or type analysis. TypeScript checks both
-the source/build configuration and the tests, but does not replace every type-aware
-lint rule. Biome does not check Python or shell scripts.
-
-Each entry is built separately to avoid shared CommonJS chunks. `globalName` remains
-`AllDebridUI`; tsdown emits an anonymous IIFE while the UI entry has no exports,
-matching the previous build. The Safari 14 target transforms syntax, without adding
-polyfills. Authentication, playback, and actual Safari/JavaScriptCore compatibility
-require manual testing on macOS with an AllDebrid account.
+Authentication and playback require manual testing on macOS with an AllDebrid account.
 
 API docs: [IINA](https://docs.iina.io/) · [AllDebrid](https://docs.alldebrid.com/)
