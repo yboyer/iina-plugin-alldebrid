@@ -3,7 +3,7 @@ import fs from 'node:fs'
 import { createRequire } from 'node:module'
 import vm from 'node:vm'
 
-import { test } from 'vite-plus/test'
+import { it } from 'vitest'
 
 const require = createRequire(import.meta.url)
 
@@ -92,7 +92,7 @@ const library = {
   ],
 }
 
-test('videos render directly without torrent name below path and preserve rows across busy changes', () => {
+it('renders videos without torrent names below paths and preserves rows across busy changes', () => {
   const h = harness()
   h.receive(library)
   const row = h.nodes.get('magnets')!.children[0]
@@ -108,7 +108,7 @@ test('videos render directly without torrent name below path and preserve rows a
   h.receive(library)
   assert.equal(button.disabled, false)
 })
-test('search shows matching paths directly and empty states follow busy', () => {
+it('shows matching paths directly and updates empty states when busy changes', () => {
   const h = harness()
   h.receive(library)
   h.nodes.get('search')!.value = 'season'
@@ -123,7 +123,7 @@ test('search shows matching paths directly and empty states follow busy', () => 
   assert.equal(empty.hidden, false)
 })
 
-test('theme follows plugin state and switches immediately', () => {
+it('follows the plugin theme and switches immediately', () => {
   const h = harness()
   h.receive({ ...library, theme: 'dark' })
   assert.equal(h.nodes.get('theme')!.value, 'dark')
@@ -134,7 +134,7 @@ test('theme follows plugin state and switches immediately', () => {
   assert.equal(h.nodes.get('theme')!.value, 'system')
 })
 
-test('search ignores accents and combines words across magnet names and file metadata', () => {
+it('ignores accents and combines search words across magnet names and file metadata', () => {
   const h = harness()
   h.receive({
     ...library,
@@ -162,7 +162,7 @@ test('search ignores accents and combines words across magnet names and file met
   assert.equal(row.children[0].children[0].textContent, '2001 · 1080P')
 })
 
-test('TMDB settings clear submitted key and posters load lazily with failure fallback', () => {
+it('clears the submitted TMDB key and loads posters lazily with a failure fallback', () => {
   const h = harness()
   h.nodes.set('tmdb-key', new h.Node('input'))
   h.nodes.get('tmdb-key')!.value = 'key'
@@ -195,7 +195,7 @@ test('TMDB settings clear submitted key and posters load lazily with failure fal
   assert.equal(placeholder.textContent, 'No poster')
 })
 
-test('missing posters retain a placeholder for movies and episodes with or without TMDB', () => {
+it('keeps placeholders for missing movie and episode posters with or without TMDB', () => {
   for (const tmdbConfigured of [false, true]) {
     for (const metadata of [{ title: 'Movie' }, { title: 'Series', season: 3, episode: 1 }]) {
       const h = harness()
@@ -212,7 +212,7 @@ test('missing posters retain a placeholder for movies and episodes with or witho
   }
 })
 
-test('poster lookup has a placeholder and unavailable magnets retain status without collapse', () => {
+it('shows a placeholder during poster lookup and preserves unavailable magnet status and layout', () => {
   const h = harness()
   h.receive({
     ...library,
@@ -234,7 +234,7 @@ test('poster lookup has a placeholder and unavailable magnets retain status with
   assert.equal(notice.children[1].textContent, 'Downloading')
 })
 
-test('delete targets the individual video and follows busy state', () => {
+it('targets the individual video for deletion and follows the busy state', () => {
   const h = harness()
   h.receive(library)
   const row = h.nodes.get('magnets')!.children[0]
@@ -248,7 +248,7 @@ test('delete targets the individual video and follows busy state', () => {
   assert.equal(button.disabled, false)
 })
 
-test('pending deletion leaves other magnets usable and removal preserves their rows and posters', () => {
+it('keeps other magnets usable during deletion and preserves their rows and posters', () => {
   const h = harness()
   const first = library.magnets[0]
   const second = {
@@ -278,7 +278,7 @@ test('pending deletion leaves other magnets usable and removal preserves their r
   assert.equal(original.children[2].children[1], poster)
   assert.equal(h.nodes.get('count')!.textContent, '1 / 1 magnets · 1 video(s)')
 })
-test('deleting the only search result updates the empty state without losing other files', () => {
+it('updates the empty state after deleting the only search result without losing other files', () => {
   const h = harness()
   const magnet = {
     ...library.magnets[0],
@@ -291,7 +291,7 @@ test('deleting the only search result updates the empty state without losing oth
   assert.equal(h.nodes.get('count')!.textContent, '0 / 1 magnets · 1 video(s)')
 })
 
-test('TMDB titles and episode names render and are searchable', () => {
+it('renders searchable TMDB titles and episode names', () => {
   const h = harness()
   const state = {
     ...library,
@@ -318,7 +318,7 @@ test('TMDB titles and episode names render and are searchable', () => {
   assert.equal(h.nodes.get('magnets')!.children.length, 1)
 })
 
-test('season-only metadata renders without an undefined episode number', () => {
+it('renders season-only metadata without an undefined episode number', () => {
   const h = harness()
   h.receive({
     ...library,

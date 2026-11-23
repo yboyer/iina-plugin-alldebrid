@@ -3,7 +3,7 @@ import fs from 'node:fs'
 import { createRequire } from 'node:module'
 import vm from 'node:vm'
 
-import { test } from 'vite-plus/test'
+import { it } from 'vitest'
 
 import type { LibraryState } from '../src/types'
 
@@ -98,6 +98,7 @@ async function harness(
       utils: { open() {} },
       global: {
         createPlayerInstance: (options: { url: string }): number | boolean => {
+          // biome-ignore lint/suspicious/noMisplacedAssertion: Every simulated player creation must run on the main thread.
           assert.equal(
             onMainThread,
             true,
@@ -142,7 +143,7 @@ async function harness(
     },
   }
 }
-test('recursive video discovery excludes archives, audio and files without links', () => {
+it('discovers videos recursively and excludes archives, audio and files without links', () => {
   assert.deepEqual(
     videos([
       {
@@ -165,7 +166,7 @@ test('recursive video discovery excludes archives, audio and files without links
     ]
   )
 })
-test('loads all magnets, requests ready files and unlocks before playback', async () => {
+it('loads all magnets, requests ready files and unlocks before playback', async () => {
   const h = await harness()
   h.respond(url => {
     if (url.endsWith('magnet/status'))
@@ -191,7 +192,7 @@ test('loads all magnets, requests ready files and unlocks before playback', asyn
   assert.equal(h.opened[0].url, 'https://cdn.example/film.mp4')
   assert.equal(h.calls[2].options.data.link, 'https://alldebrid.com/f/a')
 })
-test('PIN authentication saves the key and refreshes the account', async () => {
+it('saves the key and refreshes the account after PIN authentication', async () => {
   const storage: Record<string, unknown> = {}
   const h = await harness('', undefined, storage)
   h.respond(url => {
@@ -215,7 +216,7 @@ test('PIN authentication saves the key and refreshes the account', async () => {
   assert.equal(h.state().pin, undefined)
   assert.equal(storage['alldebrid-api-key'], 'new-secret')
 })
-test('disconnect prevents an in-flight response from restoring private library', async () => {
+it('prevents an in-flight response from restoring the private library after disconnect', async () => {
   const h = await harness()
   let finish!: (body: ResponseBody) => void
   h.respond(
@@ -231,7 +232,7 @@ test('disconnect prevents an in-flight response from restoring private library',
   assert.deepEqual(h.state().magnets, [])
   assert.equal(h.state().connected, false)
 })
-test('partial file failures preserve other magnets and report incomplete loading', async () => {
+it('preserves other magnets and reports incomplete loading after partial file failures', async () => {
   const h = await harness()
   h.respond(url =>
     url.endsWith('magnet/status')
@@ -254,7 +255,7 @@ test('partial file failures preserve other magnets and report incomplete loading
   assert.equal(h.state().magnets[1].files.length, 1)
   assert.match(h.state().message, /1 magnet/)
 })
-test('delayed links wait for readiness before opening', async () => {
+it('waits for delayed links to become ready before opening them', async () => {
   const h = await harness()
   h.respond(url => {
     if (url.endsWith('magnet/status')) return { magnets: [{ id: 1, statusCode: 4 }] }
@@ -273,14 +274,14 @@ test('delayed links wait for readiness before opening', async () => {
   assert.equal(h.opened[0].url, 'https://cdn.example/ready.mp4')
 })
 
-test('starts signed out when no AllDebrid key is saved', async () => {
+it('starts signed out when no AllDebrid key is saved', async () => {
   const h = await harness('')
   h.handlers.ready()
   assert.equal(h.state().connected, false)
   assert.equal(h.calls.length, 0)
 })
 
-test('restores the saved AllDebrid key after restart and clears it on sign-out', async () => {
+it('restores the saved AllDebrid key after restart and clears it on sign-out', async () => {
   const storage: Record<string, unknown> = {}
   await harness('saved-secret', undefined, storage)
   const h = await harness('', undefined, storage)
@@ -299,7 +300,7 @@ test('restores the saved AllDebrid key after restart and clears it on sign-out',
   assert.equal(restarted.calls.length, 0)
 })
 
-test('a refused player creation reports failure and releases the controls', async () => {
+it('reports failure and releases the controls when player creation is refused', async () => {
   const h = await harness()
   h.respond(url => {
     if (url.endsWith('magnet/status')) return { magnets: [{ id: 1, statusCode: 4 }] }
@@ -329,7 +330,7 @@ function libraryResponse(magnets: ResponseBody[]): Responder {
     return { link: 'https://cdn.example/film.mp4' }
   }
 }
-test('817 ready magnets use two file requests with indexed form fields', async () => {
+it('loads 817 ready magnets with two file requests using indexed form fields', async () => {
   const h = await harness()
   h.respond(
     libraryResponse(Array.from({ length: 817 }, (_, index) => ({ id: index + 1, statusCode: 4 })))
@@ -343,7 +344,7 @@ test('817 ready magnets use two file requests with indexed form fields', async (
   assert.equal(Object.keys(requests[1].options.data).length, 317)
   assert.equal(h.state().magnets.filter(magnet => magnet.files.length === 1).length, 817)
 })
-test('unchanged magnets retain files and playback source links', async () => {
+it('retains files and playback source links for unchanged magnets', async () => {
   const h = await harness()
   h.respond(libraryResponse([{ id: 1, statusCode: 4 }]))
   h.handlers.refresh()
@@ -357,7 +358,7 @@ test('unchanged magnets retain files and playback source links', async () => {
   await tick()
   assert.equal(h.calls.at(-1)!.options.data.link, 'https://alldebrid.com/f/1')
 })
-test('refresh retries only failed batches', async () => {
+it('retries only failed batches on refresh', async () => {
   const h = await harness()
   const magnets = Array.from({ length: 501 }, (_, index) => ({ id: index + 1, statusCode: 4 }))
   const respond = libraryResponse(magnets)
@@ -380,7 +381,7 @@ test('refresh retries only failed batches', async () => {
     true
   )
 })
-test('sign-out ignores pending file responses', async () => {
+it('ignores pending file responses after sign-out', async () => {
   const h = await harness()
   let finish!: (body: ResponseBody) => void
   h.respond(url =>
@@ -398,7 +399,7 @@ test('sign-out ignores pending file responses', async () => {
   assert.deepEqual(h.state().magnets, [])
 })
 
-test('disconnect cancels playback queued for the main thread', async () => {
+it('cancels playback queued for the main thread on disconnect', async () => {
   const h = await harness()
   h.respond(libraryResponse([{ id: 1, statusCode: 4 }]))
   h.handlers.refresh()
@@ -418,7 +419,7 @@ test('disconnect cancels playback queued for the main thread', async () => {
   assert.equal(h.state().busy, false)
 })
 
-test('PIN polling retries transient failures and completes authentication', async () => {
+it('retries transient PIN polling failures and completes authentication', async () => {
   for (const failure of [
     new Error('Offline'),
     { statusCode: 503, text: 'Unavailable' },
@@ -452,7 +453,7 @@ test('PIN polling retries transient failures and completes authentication', asyn
     assert.equal(h.state().pin, undefined)
   }
 })
-test('PIN polling stops on definitive errors, expiry and sign-out', async () => {
+it('stops PIN polling on definitive errors, expiry and sign-out', async () => {
   for (const scenario of ['invalid', 'expired', 'disconnect']) {
     const h = await harness('')
     h.respond(url => {
@@ -464,7 +465,7 @@ test('PIN polling stops on definitive errors, expiry and sign-out', async () => 
           user_url: 'https://alldebrid.com/pin/?pin=ABCD',
         }
       if (scenario === 'invalid')
-        // biome-ignore lint/style/useThrowOnlyError: IINA rejects HTTP requests with response objects.
+        // biome-ignore lint/style/useThrowOnlyError: IINA rejects HTTP requests with plain response objects.
         throw {
           statusCode: 400,
           text: JSON.stringify({ status: 'error', error: { code: 'PIN_INVALID' } }),
@@ -475,20 +476,21 @@ test('PIN polling stops on definitive errors, expiry and sign-out', async () => 
     await tick()
     await h.timers[0]!()
     await tick()
+    assert.equal(h.timers.length, scenario === 'disconnect' ? 2 : 1)
+    const calls = h.calls.length
     if (scenario === 'disconnect') {
       const retry = h.timers[1]!
       h.handlers.disconnect()
-      const calls = h.calls.length
       await retry()
       await tick()
-      assert.equal(h.calls.length, calls)
-    } else assert.equal(h.timers.length, 1)
+    }
+    assert.equal(h.calls.length, calls)
     assert.equal(h.state().pin, undefined)
     assert.equal(h.state().connected, false)
   }
 })
 
-test('theme preference persists across restart and sign-out, and rejects invalid values', async () => {
+it('preserves the theme preference across restart and sign-out and rejects invalid values', async () => {
   const storage: Record<string, unknown> = {}
   const h = await harness('', undefined, storage)
   h.handlers.ready()
@@ -508,7 +510,7 @@ test('theme preference persists across restart and sign-out, and rejects invalid
   assert.equal(storage['library-theme'], 'system')
 })
 
-test('incremental status merges partial changes, preserves files, deletes and replaces on fullsync', async () => {
+it('merges incremental status changes, preserves files and applies deletions and fullsync replacements', async () => {
   const h = await harness('secret', (url, options) =>
     url.endsWith('magnet/status')
       ? {
@@ -548,7 +550,7 @@ test('incremental status merges partial changes, preserves files, deletes and re
   assert.deepEqual(h.state().magnets, [])
 })
 
-test('filename metadata identifies movies and episodes while preserving unknown titles', () => {
+it('identifies movies and episodes from filenames while preserving unknown titles', () => {
   const { metadata } = require('../dist/plugin/library.js')
   assert.deepEqual(metadata('Amélie.2001.1080p.MULTI.x265.BluRay.mkv'), {
     year: 2001,
@@ -570,7 +572,7 @@ test('filename metadata identifies movies and episodes while preserving unknown 
   assert.equal(metadata('Un titre inconnu.mkv').title, 'Un titre inconnu')
 })
 
-test('cache follows file changes, readiness, deletion and full snapshots', async () => {
+it('updates the cache for file changes, readiness, deletion and full snapshots', async () => {
   const h = await harness()
   let magnets: ResponseBody[] = [{ id: 1, filename: 'Film', statusCode: 4, size: 10 }]
   h.respond((url, options) => libraryResponse(magnets)(url, options))
@@ -617,7 +619,7 @@ const tmdbLibrary = (url: string) =>
           },
         ],
       }
-test('TMDB stores key, searches title/year, caches duplicates, and enriches episodes', async () => {
+it('stores the TMDB key, searches by title and year, caches duplicates and enriches episodes', async () => {
   const storage: Record<string, unknown> = {}
   const h = await harness('secret', tmdbLibrary, storage)
   h.respond(url => {
@@ -661,7 +663,7 @@ test('TMDB stores key, searches title/year, caches duplicates, and enriches epis
   assert.equal(h.state().magnets[0].files[0].tmdbTitle, undefined)
   assert.equal(h.state().magnets[0].files[2].episodeTitle, undefined)
 })
-test('TMDB failures retry on refresh, missing posters are cached, and playback remains available', async () => {
+it('retries TMDB failures on refresh, caches missing posters and keeps playback available', async () => {
   const h = await harness('secret', tmdbLibrary)
   h.respond(url => {
     if (url.includes('/search/movie')) throw new Error('Offline')
@@ -686,7 +688,7 @@ test('TMDB failures retry on refresh, missing posters are cached, and playback r
   await tick()
   assert.equal(h.calls.slice(count).filter(call => call.url.includes('/search/movie')).length, 0)
 })
-test('TMDB shares series results and retries episode failures without losing the series poster', async () => {
+it('shares TMDB series results and retries episode failures without losing the series poster', async () => {
   const seriesLibrary = (url: string) =>
     url.endsWith('magnet/status')
       ? { magnets: [{ id: 1, filename: 'Series', statusCode: 4 }] }
@@ -734,7 +736,7 @@ test('TMDB shares series results and retries episode failures without losing the
   await tick()
   assert.equal(h.calls.slice(count).filter(call => call.url.includes('themoviedb')).length, 0)
 })
-test('TMDB uses the first movie title even without a poster', async () => {
+it('uses the first TMDB movie title even without a poster', async () => {
   const h = await harness('secret', tmdbLibrary)
   h.respond(url =>
     url.includes('/search/')
@@ -751,7 +753,7 @@ test('TMDB uses the first movie title even without a poster', async () => {
   assert.equal(h.state().magnets[0].files[0].tmdbTitle, 'Titre officiel')
   assert.equal(h.state().magnets[0].files[0].poster, null)
 })
-test('pending TMDB responses are ignored after sign-out and key replacement', async () => {
+it('ignores pending TMDB responses after sign-out and key replacement', async () => {
   for (const action of ['disconnect', 'replace']) {
     const h = await harness('secret', tmdbLibrary)
     let resolve!: (body: ResponseBody) => void
@@ -769,7 +771,7 @@ test('pending TMDB responses are ignored after sign-out and key replacement', as
     resolve({ results: [{ poster_path: '/stale.jpg' }] })
     await tick()
     assert.equal(JSON.stringify(h.state()).includes('stale.jpg'), false)
-    if (action === 'disconnect') assert.deepEqual(h.state().magnets, [])
+    assert.equal(h.state().magnets.length, action === 'disconnect' ? 0 : 1)
   }
 })
 
@@ -787,7 +789,7 @@ const deletionLibrary = (url: string) =>
           },
         ],
       }
-test('media deletion persists across refresh and restart and deletes the magnet only for the last video', async () => {
+it('preserves media deletion across refresh and restart and deletes the magnet only for the last video', async () => {
   const storage: Record<string, unknown> = {}
   const h = await harness('secret', deletionLibrary, storage)
   h.respond(deletionLibrary)
@@ -821,7 +823,7 @@ test('media deletion persists across refresh and restart and deletes the magnet 
   await tick()
   assert.deepEqual(restarted.state().magnets, [])
 })
-test('failed last-media deletion preserves the video and disconnect ignores a pending deletion', async () => {
+it('preserves the video when last-media deletion fails and ignores pending deletion after disconnect', async () => {
   const h = await harness('secret', deletionLibrary)
   h.handlers['delete-media']('1:0')
   await tick()
@@ -849,7 +851,7 @@ test('failed last-media deletion preserves the video and disconnect ignores a pe
   assert.equal(h.state().message, 'Signed out.')
 })
 
-test('pending deletion is scoped to a magnet, rejects duplicates and allows other playback', async () => {
+it('scopes pending deletion to a magnet, rejects duplicates and allows other playback', async () => {
   const listing = (url: string) =>
     url.endsWith('magnet/status')
       ? {
@@ -892,7 +894,7 @@ test('pending deletion is scoped to a magnet, rejects duplicates and allows othe
     ['2']
   )
 })
-test('deletion keeps remaining poster results and does not restart TMDB lookups', async () => {
+it('keeps remaining poster results after deletion without restarting TMDB lookups', async () => {
   const h = await harness('secret', tmdbLibrary)
   h.respond(url =>
     url.includes('/search/movie') ? { results: [{ poster_path: '/movie.jpg' }] } : tmdbLibrary(url)

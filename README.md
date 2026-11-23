@@ -6,7 +6,7 @@ Browse your AllDebrid videos and play them in IINA. Includes search, a ready-onl
 
 ## Installation
 
-Requires **IINA 1.4.0+** on macOS with plugins enabled, **Node.js 24+**, and **Python 3**.
+Requires **IINA 1.4.0+** on macOS with plugins enabled.
 
 ```sh
 npm ci
@@ -45,12 +45,14 @@ Matches use information parsed from filenames and may be imperfect. Titles are r
 
 ## Development
 
-The toolchain uses [Vite+](https://viteplus.dev/) for builds, linting, and formatting.
-TypeScript sources live in `src/`; build output goes to `dist/plugin`.
-Tests use Vitest through Vite+ and build the plugin before running.
+Use npm and the Node.js version in `.node-version`.
+The toolchain uses [tsdown](https://tsdown.dev/), [Biome](https://biomejs.dev/),
+TypeScript, and [Vitest](https://vitest.dev/).
+Sources are in `src/`; builds are written to `dist/plugin` as four independent IINA bundles.
+Tests build the plugin before running.
 
 ```sh
-npm run lint       # Check code, formatting, and TypeScript with Vite+
+npm run lint       # Check Biome rules, formatting, and source/test types
 npm test           # Build and run unit and regression tests
 npm run pack       # Build and create the plugin archive
 ```

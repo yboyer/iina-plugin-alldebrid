@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict'
 
-import { test } from 'vite-plus/test'
+import { it } from 'vitest'
 
 import { metadata, videos } from '../src/library.ts'
 
-test('recursive video discovery excludes archives, audio and files without links', () => {
+it('discovers videos recursively and excludes archives, audio and files without links', () => {
   assert.deepEqual(
     videos([
       {
@@ -27,7 +27,7 @@ test('recursive video discovery excludes archives, audio and files without links
     ]
   )
 })
-test('filename metadata identifies movies and episodes while preserving unknown titles', () => {
+it('identifies movies and episodes from filenames while preserving unknown titles', () => {
   assert.deepEqual(metadata('Amélie.2001.1080p.MULTI.x265.BluRay.mkv'), {
     year: 2001,
     resolution: '1080P',
@@ -48,7 +48,7 @@ test('filename metadata identifies movies and episodes while preserving unknown 
   assert.equal(metadata('Un titre inconnu.mkv').title, 'Un titre inconnu')
 })
 
-test('torrent parser handles season packs, release tags, and local language and codec handlers', () => {
+it('parses season packs, release tags, and local language and codec markers', () => {
   assert.deepEqual(metadata('Show.Season.2.1080p.NF.WEB-DL.AV1.VFQ.mkv'), {
     season: 2,
     resolution: '1080P',

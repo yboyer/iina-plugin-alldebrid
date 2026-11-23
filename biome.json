@@ -1,0 +1,37 @@
+{
+  "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
+  "extends": ["@yboyer/config/biome.json"],
+  "overrides": [
+    {
+      "includes": ["src/global.ts", "src/library-ui.ts"],
+      "javascript": {
+        "globals": ["iina"]
+      }
+    },
+    {
+      "includes": ["src/**/*.d.ts"],
+      "linter": {
+        "rules": {
+          "style": {
+            "useImportType": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["src/library.css"],
+      "linter": {
+        "rules": {
+          "complexity": {
+            "noImportantStyles": "off"
+          }
+        }
+      }
+    }
+  ],
+  "css": {
+    "formatter": {
+      "quoteStyle": "single"
+    }
+  }
+}
