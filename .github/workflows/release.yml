@@ -28,7 +28,7 @@ jobs:
       - run: npm run lint
       - run: npm test
       - run: |
-          npx --yes --package=semantic-release@26.0.1 --package=@yboyer/semantic-release-config@1.0.0 --package=@semantic-release/exec@7.1.0 -c '
+          npx --yes --min-release-age=0 --package=semantic-release@26.0.1 --package=@yboyer/semantic-release-config@1.0.0 --package=@semantic-release/exec@7.1.0 -c '
             mkdir -p node_modules/@yboyer &&
             ln -s "$(dirname "$(command -v semantic-release)")/../@yboyer/semantic-release-config" node_modules/@yboyer/semantic-release-config &&
             semantic-release
