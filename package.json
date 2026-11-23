@@ -14,11 +14,9 @@
   },
   "devDependencies": {
     "@biomejs/biome": "2.6.4",
-    "@semantic-release/exec": "7.1.0",
     "@tsconfig/node26": "26.0.2",
     "@types/node": "26.6.6",
     "@yboyer/config": "2.4.0",
-    "@yboyer/semantic-release-config": "1.0.0",
     "tsdown": "0.23.5",
     "typescript": "7.0.2",
     "vitest": "5.1.0"
