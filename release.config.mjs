@@ -1,4 +1,4 @@
-// biome-ignore lint/correctness/noUndeclaredDependencies: The release job installs this package through npx.
+// biome-ignore lint/correctness/noUndeclaredDependencies: The release job installs this package without saving it.
 import { createReleaseConfig } from '@yboyer/semantic-release-config'
 
 export default createReleaseConfig({
